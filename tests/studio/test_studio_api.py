@@ -64,17 +64,25 @@ def test_health_reports_ffmpeg(client: TestClient) -> None:
     assert "available" in payload["ffmpeg"]
 
 
-def test_index_serves_the_ui(client: TestClient) -> None:
+def test_index_serves_the_campaign_studio(client: TestClient) -> None:
+    """The root is the four-system studio; the single-prompt tools live at /ui/classic.html."""
     response = client.get("/")
     assert response.status_code == 200
     body = response.text
     assert "OpenMontage" in body
-    assert "/ui/app.js" in body
-    assert 'id="composerForm"' in body
+    assert "/ui/campaigns.js" in body
+    assert "data-nav=\"create\"" in body
+
+
+def test_classic_tools_still_served(client: TestClient) -> None:
+    response = client.get("/ui/classic.html")
+    assert response.status_code == 200
+    assert 'id="composerForm"' in response.text
+    assert "/ui/app.js" in response.text
 
 
 def test_static_assets(client: TestClient) -> None:
-    for path in ("/ui/app.js", "/ui/styles.css"):
+    for path in ("/ui/app.js", "/ui/campaigns.js", "/ui/styles.css", "/ui/campaigns.css"):
         assert client.get(path).status_code == 200, path
 
 

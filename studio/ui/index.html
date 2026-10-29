@@ -3,217 +3,43 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>OpenMontage Studio</title>
-<meta name="description" content="Generate images and motion videos from a prompt or an uploaded image, powered by the OpenMontage repository." />
+<title>OpenMontage — Creative &amp; Growth Studio</title>
+<meta name="description" content="One studio, four systems: concept, creative, production and TikTok growth. Describe an idea or drop an image and get a finished, checked, publish-ready post." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0d12'/><rect x='18' y='30' width='64' height='10' rx='2' fill='%23d14a28'/><rect x='18' y='46' width='64' height='10' rx='2' fill='%23f7f5f2'/><rect x='18' y='62' width='64' height='10' rx='2' fill='%23d14a28'/></svg>" />
 <link rel="stylesheet" href="/ui/styles.css" />
+<link rel="stylesheet" href="/ui/campaigns.css" />
 </head>
-<body>
-<a class="skip" href="#composer">Skip to composer</a>
+<body class="cs-page">
+<a class="skip" href="#main">Skip to content</a>
 
-<header class="topbar">
-  <div class="brand">
-    <div class="clapper" aria-hidden="true">
-      <span></span><span></span><span></span>
-    </div>
-    <div class="brand-text">
-      <h1>OpenMontage <em>Studio</em></h1>
-      <p>Your repository is the backend</p>
-    </div>
-  </div>
+<header class="cs-bar">
+  <a class="cs-brand" href="/" data-nav="create">
+    <span class="clapper" aria-hidden="true"><span></span><span></span><span></span></span>
+    <span class="cs-brand-text">
+      <strong>OpenMontage</strong>
+      <em>Creative &amp; Growth Studio</em>
+    </span>
+  </a>
 
-  <div class="topbar-right">
-    <div class="cap-chips" id="capChips" aria-label="Configured capabilities"></div>
-    <button class="btn ghost" id="boardBtn" title="Open the repository's live Backlot storyboard">
-      <span class="dot" id="boardDot"></span> Board
-    </button>
-    <button class="btn ghost" id="keysBtn" title="Configure provider API keys (.env)">
-      Keys <span class="count-pill" id="keysCount">0</span>
-    </button>
+  <nav class="cs-nav" aria-label="Primary">
+    <button class="cs-nav-btn is-active" data-nav="create">Create</button>
+    <button class="cs-nav-btn" data-nav="library">Projects <span class="cs-count" id="navCount">0</span></button>
+  </nav>
+
+  <div class="cs-bar-right">
+    <div class="cs-mode" role="group" aria-label="Working mode">
+      <button data-mode="automatic" class="is-active" title="One click. The studio decides.">Automatic</button>
+      <button data-mode="control" title="Change one thing without rebuilding everything">Creative&nbsp;Control</button>
+      <button data-mode="advanced" title="Inspect prompts, shots and the timeline">Advanced</button>
+    </div>
+    <a class="cs-link" href="/ui/classic.html" title="The original single-prompt tools">Classic tools</a>
   </div>
 </header>
 
-<div class="notice" id="notice" hidden>
-  <strong id="noticeTitle">No image provider configured</strong>
-  <span id="noticeBody"></span>
-  <button class="link" id="noticeAction">Configure a key</button>
-  <button class="icon-btn" id="noticeClose" aria-label="Dismiss">✕</button>
-</div>
+<main id="main" class="cs-main" aria-live="polite"></main>
 
-<main class="layout">
-  <!-- ───────────────────────── composer ───────────────────────── -->
-  <section class="panel composer" id="composer" aria-labelledby="composerTitle">
-    <h2 class="panel-title" id="composerTitle">Compose</h2>
+<div class="cs-toast" id="toast" hidden></div>
 
-    <div class="segmented" role="tablist" aria-label="Output type">
-      <button role="tab" class="seg active" data-mode="image" aria-selected="true">Image</button>
-      <button role="tab" class="seg" data-mode="video_from_text" aria-selected="false">Video from prompt</button>
-      <button role="tab" class="seg" data-mode="video_from_image" aria-selected="false">Image → video</button>
-    </div>
-
-    <form id="composerForm" novalidate>
-      <!-- upload (image → video only) -->
-      <div class="field upload-field" id="uploadField" hidden>
-        <label class="label" for="fileInput">Source image</label>
-        <label class="dropzone" id="dropzone" for="fileInput" tabindex="0">
-          <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif" hidden />
-          <div class="dz-empty" id="dzEmpty">
-            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span><b>Drop an image</b> or click to browse</span>
-            <small>PNG · JPG · WEBP · up to 32 MB</small>
-          </div>
-          <img class="dz-preview" id="dzPreview" alt="Selected source image preview" hidden />
-        </label>
-        <button type="button" class="dz-clear" id="dzClear" hidden aria-label="Remove image">✕</button>
-      </div>
-
-      <!-- prompt -->
-      <div class="field">
-        <label class="label" for="prompt">
-          <span id="promptLabel">Prompt</span>
-          <span class="hint" id="promptHint">Describe the shot</span>
-        </label>
-        <textarea id="prompt" rows="4" placeholder="A lighthouse at dusk, storm building offshore, cinematic teal and amber light…" maxlength="4000"></textarea>
-        <div class="chips" id="promptSamples"></div>
-      </div>
-
-      <!-- controls -->
-      <div class="grid2">
-        <div class="field">
-          <label class="label" for="aspect">Aspect</label>
-          <select id="aspect"></select>
-        </div>
-        <div class="field">
-          <label class="label" for="style">Look</label>
-          <select id="style"></select>
-        </div>
-      </div>
-
-      <div class="grid2" id="motionRow">
-        <div class="field">
-          <label class="label" for="motion">Camera motion</label>
-          <select id="motion"></select>
-        </div>
-        <div class="field">
-          <label class="label" for="duration">Duration <output id="durationOut" for="duration">6s</output></label>
-          <input type="range" id="duration" min="2" max="20" step="1" value="6" />
-        </div>
-      </div>
-
-      <div class="grid2" id="imageCountRow">
-        <div class="field">
-          <label class="label" for="count">Images</label>
-          <select id="count">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-          </select>
-        </div>
-        <div class="field">
-          <label class="label" for="provider">Provider</label>
-          <select id="provider"><option value="auto">Auto (scored)</option></select>
-        </div>
-      </div>
-
-      <div class="engine-row" id="engineRow">
-        <span class="label">Motion engine</span>
-        <div class="radio-group">
-          <label class="radio">
-            <input type="radio" name="engine" value="motion" checked />
-            <span><b>Local camera motion</b><small>ffmpeg · instant · free</small></span>
-          </label>
-          <label class="radio">
-            <input type="radio" name="engine" value="video_model" />
-            <span><b>AI video model</b><small id="videoModelHint">needs a video provider</small></span>
-          </label>
-        </div>
-      </div>
-
-      <div class="provider-line" id="providerLine"></div>
-
-      <button type="submit" class="btn primary submit" id="submitBtn">
-        <span class="spinner" hidden></span>
-        <span id="submitLabel">Generate image</span>
-        <kbd>⌘⏎</kbd>
-      </button>
-      <p class="fineprint" id="fineprint"></p>
-    </form>
-  </section>
-
-  <!-- ───────────────────────── results ───────────────────────── -->
-  <section class="panel results" aria-labelledby="resultsTitle">
-    <div class="results-head">
-      <h2 class="panel-title" id="resultsTitle">Run</h2>
-      <div class="filters" role="group" aria-label="Filter runs">
-        <button class="chip active" data-filter="all">All</button>
-        <button class="chip" data-filter="image">Images</button>
-        <button class="chip" data-filter="video">Videos</button>
-      </div>
-      <div class="stats" id="stats"></div>
-    </div>
-
-    <div class="active-run" id="activeRun" hidden></div>
-
-    <div class="gallery" id="gallery" aria-live="polite"></div>
-    <div class="empty" id="emptyState">
-      <div class="empty-mark" aria-hidden="true">◧</div>
-      <h3>Nothing rendered yet</h3>
-      <p>Write a prompt on the left, or drop an image to set it in motion.</p>
-    </div>
-  </section>
-</main>
-
-<footer class="foot">
-  <span>Powered by <b>OpenMontage</b> · tools discovered live from <code>tools/tool_registry.py</code></span>
-  <span class="foot-right"><a href="/api/docs" target="_blank" rel="noreferrer">API</a> · <span id="footTools">—</span></span>
-</footer>
-
-<!-- ───────────────────────── keys modal ───────────────────────── -->
-<dialog id="keysDialog" class="modal">
-  <form method="dialog" class="modal-inner" id="keysForm">
-    <header class="modal-head">
-      <div>
-        <h2>Provider keys</h2>
-        <p>Written to <code>.env</code> in the repository root. Every key is optional — the Studio works without them.</p>
-      </div>
-      <button type="button" class="icon-btn" data-close-keys aria-label="Close">✕</button>
-    </header>
-    <div class="modal-body">
-      <div class="key-note" id="keyNote"></div>
-      <div class="keys-list" id="keysList"></div>
-    </div>
-    <footer class="modal-foot">
-      <span id="keysStatus" class="muted"></span>
-      <div>
-        <button type="button" class="btn ghost" data-close-keys>Cancel</button>
-        <button class="btn primary" id="keysSave" type="submit">Save keys</button>
-      </div>
-    </footer>
-  </form>
-</dialog>
-
-<!-- ───────────────────────── detail modal ───────────────────────── -->
-<dialog id="detailDialog" class="modal wide">
-  <div class="modal-inner">
-    <header class="modal-head">
-      <div>
-        <h2 id="detailTitle">Run</h2>
-        <p id="detailSub" class="muted"></p>
-      </div>
-      <button class="icon-btn" id="detailClose" aria-label="Close">✕</button>
-    </header>
-    <div class="modal-body detail-body" id="detailBody"></div>
-  </div>
-</dialog>
-
-<div class="lightbox" id="lightbox" hidden>
-  <button class="icon-btn" id="lightboxClose" aria-label="Close">✕</button>
-  <img id="lightboxImg" alt="" />
-</div>
-
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-<script src="/ui/app.js"></script>
+<script src="/ui/campaigns.js" defer></script>
 </body>
 </html>

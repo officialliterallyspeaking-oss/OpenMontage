@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from studio import jobs as store
 from studio import pipelines
+from studio.api_projects import router as studio_router
 from studio.repo_bridge import (
     PROJECTS_DIR,
     REPO_ROOT,
@@ -74,6 +75,8 @@ class KeyRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="OpenMontage Studio", version="1.0.0", docs_url="/api/docs")
+
+app.include_router(studio_router)
 
 if UI_DIR.is_dir():
     app.mount("/ui", StaticFiles(directory=UI_DIR), name="ui")

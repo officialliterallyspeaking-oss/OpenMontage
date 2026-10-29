@@ -1,38 +1,98 @@
 # OpenMontage Studio
 
-A small web frontend for this repository. One prompt — or one uploaded image —
-becomes an image or a motion video. The repository **is** the backend: the Studio
-adds an HTTP surface and a UI, and calls the same tools the agent does.
+Two surfaces over this repository:
+
+**The Creative & Growth Studio** (`/`) — four systems working as one. Describe an
+idea or drop an image and you get a decided concept, designed visuals, a script,
+a cut video with burned captions, a quality report, and a publish-ready TikTok
+package. No prompt engineering, no manual hand-offs between tools.
+
+**The classic tools** (`/ui/classic.html`) — the original single-prompt screens:
+prompt → image, prompt → video, image → video.
+
+The repository **is** the backend. Both surfaces call the same `tools/` the agent
+calls; nothing is reimplemented in the frontend.
 
 ```
-Browser ──► studio/app.py (FastAPI) ──► studio/pipelines.py
-                                            ├─► tools/graphics/image_selector.py  → any configured image model
-                                            ├─► tools/video/video_selector.py     → any configured video model
-                                            └─► studio/motion.py (FFmpeg)         → camera moves over stills
+Browser ──► studio/api_projects.py ──► studio/brain/orchestrator.py
+                                            ├─ director.py    System 1 · Viral Content Director
+                                            ├─ creative.py    System 2 · Universal Creative Engine
+                                            ├─ producer.py    System 3 · Automatic Production Engine
+                                            └─ growth.py      System 4 · TikTok Growth Engine
+                                                    │
+                                                    ├─► studio/motion.py + brain/assembly.py (FFmpeg)
+                                                    └─► tools/graphics/image_selector.py, tools/video/video_selector.py
 ```
 
-Everything it produces lands in a real OpenMontage project workspace
-(`projects/studio-<slug>-<id>/`) with schema-valid artifacts and checkpoints, so
-the [Backlot board](../backlot/README.md) can watch it.
+## The four systems
+
+| System | Decides | Produces | Repository artifacts |
+|--------|---------|----------|----------------------|
+| **Viral Content Director** | which angle wins and why, hook, beat structure, platform, length | scored angle shortlist, brief, hook set, beat sheet | `brief.json` |
+| **Universal Creative Engine** | which model to use, palette, lighting, framing, camera moves | measured source analysis, prompts, frames | `scene_plan.json` inputs |
+| **Automatic Production Engine** | script, storyboard, cut timing, caption timing | MP4 with burned captions, QA findings | `script.json`, `scene_plan.json`, `edit_decisions.json`, `review.json`, `final_review.json` |
+| **TikTok Growth Engine** | caption, hashtags, search terms, sound brief, cadence | publish-ready package, publish log | `publish_log.json` |
+
+They share **one project object** (`projects/<id>/brain/context.json`), not files
+passed by hand. Each component records a content hash and its dependencies, so a
+refinement recomputes exactly what it invalidated:
+
+| You change | What recomputes |
+|------------|-----------------|
+| the opening line | script → captions → render → QA → package. **Artwork is reused.** |
+| one scene | one shot regenerated → storyboard → cut → render → QA → package |
+| the palette | plan → prompts → frames → render → QA → package |
+| the angle | everything downstream of the decision |
+
+## Creative decisions are explicit, not asserted
+
+Every angle is scored out of 100 against the request's own traits, with the
+points itemised (`+6 works from a single still`, `-8 needs ~16s of rhythm but
+only 15s is available`). The runner-up and the reason it lost are shown too.
+Nothing is called "viral" or "guaranteed": the package states that no view
+count, completion rate or search volume was measured, because none can be.
 
 ## Run it
 
 ```bash
-# from the repository root
 python -m studio serve                 # http://127.0.0.1:8000
 python -m studio serve --port 8080 --warm
 python -m studio doctor                # capability envelope, no server
 ```
 
-`make studio` does the same. Install deps first with `make setup`, or at minimum:
+`make studio` does the same. FFmpeg is required for video; if `ffmpeg` is not on
+`PATH` the Studio links the static binary from the `imageio-ffmpeg` wheel into
+`.runtime/bin/` automatically.
 
-```bash
-pip install -r requirements.txt
-```
+## What works without a model provider
 
-FFmpeg is required for video. If `ffmpeg` is not on `PATH`, the Studio links the
-static binary from the `imageio-ffmpeg` wheel into `.runtime/bin/` automatically —
-nothing to configure.
+The pipeline is real even with no credentials: concept, brief, prompts, script,
+storyboard, edit decisions, captions, render, QA and the publishing package all
+run. Only the frames change:
+
+* **image-led** — real crops and grades of *your* photograph (provenance `source`)
+* **text-led** — frames composed by the studio's art director (provenance `local`)
+
+Both are labelled in the video, in the UI, in the QA report and in the package.
+A local frame is never presented as model output. Configure a provider key and
+the same pipeline routes to it through the repository's selectors.
+
+## Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/studio/capabilities` | what can actually run here, and why |
+| `POST` | `/api/studio/upload` | bring an image in |
+| `POST` | `/api/studio/projects` | create a campaign (text, image or full TikTok) |
+| `GET` | `/api/studio/projects` | list campaigns |
+| `GET` | `/api/studio/projects/{id}` | the whole shared project state + six real progress stages |
+| `POST` | `/api/studio/projects/{id}/refine` | Creative Control: `hook`, `scene`, `palette`, `duration`, `concept`, `caption_text`, `sound` |
+| `POST` | `/api/studio/projects/{id}/retry` | resume after a failure, keeping finished work |
+| `GET` | `/api/studio/projects/{id}/inspect` | prompts, storyboard, edits, cues, artifacts |
+| `GET` | `/api/studio/projects/{id}/artifacts/{file}` | the schema-shaped JSON on disk |
+
+The classic endpoints (`/api/images`, `/api/videos/from-text`,
+`/api/videos/from-image`, `/api/jobs`, `/api/catalog`, `/api/keys`) are unchanged.
 
 ## The three flows
 
