@@ -343,3 +343,62 @@ def test_placeholder_uses_playbook_palette() -> None:
 
     palette = playbook_palette("flat-motion-graphics")
     assert palette[0].lower() == "#7c3aed"  # straight from styles/flat-motion-graphics.yaml
+
+
+# ---------------------------------------------------------------------------
+# restart recovery
+# ---------------------------------------------------------------------------
+
+def test_interrupted_jobs_are_reconciled_on_load(tmp_path: Path, monkeypatch) -> None:
+    """A run cut off by a server restart must not stay "running" forever.
+
+    Studio is single-process, so a persisted queued/running job cannot still be
+    working; load() marks it failed with a reason the UI can show.
+    """
+    from studio import jobs as store
+
+    payload = {
+        "version": 1,
+        "jobs": [
+            {
+                "id": "stuck00001",
+                "kind": "video_from_text",
+                "prompt": "interrupted run",
+                "status": "running",
+                "steps": [
+                    {"name": "provider", "status": "done", "detail": ""},
+                    {"name": "motion", "status": "running", "detail": ""},
+                ],
+            },
+            {
+                "id": "finished02",
+                "kind": "image",
+                "prompt": "already done",
+                "status": "done",
+                "steps": [{"name": "done", "status": "done", "detail": ""}],
+            },
+        ],
+    }
+    jobs_path = tmp_path / "jobs.json"
+    jobs_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    monkeypatch.setattr(store, "JOBS_PATH", jobs_path)
+    monkeypatch.setattr(store, "_jobs", {})
+    monkeypatch.setattr(store, "_order", [])
+
+    store.load()
+
+    stuck = store.get("stuck00001")
+    assert stuck is not None
+    assert stuck.status == "failed"
+    assert "Interrupted" in (stuck.error or "")
+    assert stuck.steps[1].status == "failed"
+    assert stuck.steps[0].status == "done"  # completed work is preserved
+
+    untouched = store.get("finished02")
+    assert untouched is not None and untouched.status == "done"
+
+    persisted = json.loads(jobs_path.read_text())["jobs"]
+    by_id = {j["id"]: j for j in persisted}
+    assert by_id["stuck00001"]["status"] == "failed"
+    assert by_id["finished02"]["status"] == "done"

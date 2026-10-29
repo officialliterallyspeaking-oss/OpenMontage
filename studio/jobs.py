@@ -121,12 +121,22 @@ def save() -> None:
 
 
 def load() -> None:
+    """Rehydrate the gallery, reconciling runs the last process left behind.
+
+    Studio is deliberately single-process: jobs live in memory and are mirrored
+    here. So a job persisted as ``queued``/``running`` cannot still be working —
+    the process that owned it is gone. Left alone it would sit in the gallery
+    forever and the UI would keep polling a run that will never advance. Mark
+    those ``failed`` with an explicit reason instead.
+    """
     if not JOBS_PATH.exists():
         return
     try:
         payload = json.loads(JOBS_PATH.read_text(encoding="utf-8"))
     except Exception:
         return
+
+    reconciled = 0
     with _lock:
         for raw in payload.get("jobs", []):
             try:
@@ -138,6 +148,22 @@ def load() -> None:
                 _order.append(job.id)
             except Exception:
                 continue
+
+            if job.status in ("queued", "running"):
+                job.status = "failed"
+                job.error = (
+                    "Interrupted: the Studio server restarted while this run was "
+                    "in progress. Submit it again to regenerate."
+                )
+                for step in job.steps:
+                    if step.status in ("pending", "running"):
+                        step.status = "failed"
+                        step.detail = step.detail or "interrupted"
+                job.note("Marked interrupted on server restart.")
+                reconciled += 1
+
+    if reconciled:
+        save()
 
 
 # ---------------------------------------------------------------------------
