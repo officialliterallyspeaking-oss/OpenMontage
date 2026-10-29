@@ -104,3 +104,6 @@ venv/
 
 # Local Wan / diffusers GPU environment
 .venv-wan/
+
+# OpenMontage Studio — job index + uploaded source images (local only)
+studio_state/

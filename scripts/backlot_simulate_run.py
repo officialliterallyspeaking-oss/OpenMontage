@@ -94,6 +94,27 @@ def main() -> int:
     brief["topic"] = "The Last Lighthouse"
     cp("research", "completed", {"research_brief": brief})
 
+    # proposal gates too (concept + production plan approval)
+    cp("proposal", "in_progress", {})
+    from tests.contracts.test_phase0_contracts import sample_artifact
+    packet = sample_artifact("proposal_packet")
+    packet["production_plan"]["pipeline"] = "cinematic"
+    packet["production_plan"]["render_runtime"] = "remotion"
+    packet["production_plan"]["delivery_promise"] = {
+        "promise_type": "motion_led",
+        "motion_required": False,
+        "source_required": False,
+        "tone_mode": "cinematic",
+        "quality_floor": "presentable",
+        "approved_fallback": "still_led",
+    }
+    save_artifact("proposal_packet", packet)
+    cp("proposal", "awaiting_human", {"proposal_packet": packet},
+       review={"round": 1, "decision": "pass", "critical": 0, "suggestions": 0,
+               "nitpicks": 1, "summary": "Concept c1 chosen; music plan resolved."})
+    time.sleep(wait)  # "user approves the concept on the board"
+    cp("proposal", "completed", {"proposal_packet": packet}, human_approved=True)
+
     # script gates: awaiting_human -> approved
     cp("script", "in_progress", {})
     save_artifact("script", art["script"])

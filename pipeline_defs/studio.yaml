@@ -1,0 +1,103 @@
+name: studio
+version: "1.0"
+description: >
+  Single-request generation pipeline driven by OpenMontage Studio. One prompt (or one
+  uploaded image) goes in; images and a motion video come out. It exists so Studio runs
+  write the same canonical artifacts and checkpoints as any other pipeline, which is what
+  lets the Backlot board show them without special-casing.
+category: generated
+stability: production
+
+default_checkpoint_policy: guided
+
+reference_input:
+  supported: false
+
+extensions:
+  custom_scripts: false
+  custom_playbooks: true
+  custom_skills: false
+  custom_tools: false
+
+required_skills:
+  - pipelines/studio/idea-director
+  - pipelines/studio/compose-director
+  - meta/checkpoint-protocol
+
+orchestration:
+  mode: executive-producer
+  budget_default_usd: 2.00
+  max_revisions_per_stage: 1
+  max_send_backs: 1
+  max_wall_time_minutes: 30
+
+compatible_playbooks:
+  recommended:
+    - clean-professional
+  also_works:
+    - flat-motion-graphics
+    - premium-minimalist
+    - minimalist-diagram
+    - anime-ghibli
+  custom_allowed: true
+
+# The Studio UI collects the creative brief and the provider choice up front and
+# announces both before generating. The user pressing "Generate" is the approval,
+# so no stage re-gates the run.
+stages:
+  - name: idea
+    skill: pipelines/studio/idea-director
+    produces:
+      - brief
+    tools_available: []
+    checkpoint_required: true
+    human_approval_default: false
+    review_focus:
+      - Prompt preserved verbatim
+      - Style matches the playbook the user picked
+      - Only providers that are actually configured are promised
+    success_criteria:
+      - Schema-valid brief artifact
+      - Prompt traceable from request to brief
+
+  - name: assets
+    skill: pipelines/studio/idea-director
+    required_artifacts_in:
+      - brief
+    produces:
+      - asset_manifest
+    required_tools:
+      - image_selector
+    tools_available:
+      - image_selector
+      - video_selector
+    checkpoint_required: true
+    human_approval_default: false
+    review_focus:
+      - Every asset file exists on disk
+      - Provider provenance recorded per asset
+      - Total cost within the announced estimate
+    success_criteria:
+      - Schema-valid asset_manifest
+      - All asset paths resolve to existing files
+
+  - name: compose
+    skill: pipelines/studio/compose-director
+    required_artifacts_in:
+      - asset_manifest
+    produces:
+      - render_report
+    required_tools:
+      - video_compose
+    tools_available:
+      - video_compose
+      - video_stitch
+    checkpoint_required: true
+    human_approval_default: false
+    review_focus:
+      - Output video exists and plays
+      - Duration and resolution match the requested profile
+      - Motion treatment matches the approved camera move
+    success_criteria:
+      - Schema-valid render_report
+      - Output file exists and passes ffmpeg validation

@@ -1,12 +1,13 @@
 PYTHON_VERSION ?= 3.10
 VENV_DIR ?= .venv
+STUDIO_PORT ?= 8000
 BASE_PYTHON ?= $(shell command -v python$(PYTHON_VERSION) 2>/dev/null || command -v python3 2>/dev/null || command -v python 2>/dev/null)
 RUN_PYTHON = $(shell for dir in "$$VIRTUAL_ENV" "$$CONDA_PREFIX" "$(VENV_DIR)"; do if [ -n "$$dir" ] && [ -x "$$dir/bin/python" ]; then printf "%s/bin/python" "$$dir"; exit 0; elif [ -n "$$dir" ] && [ -x "$$dir/Scripts/python.exe" ]; then printf "%s/Scripts/python.exe" "$$dir"; exit 0; fi; done; if [ "$(OS)" = "Windows_NT" ]; then printf "%s/Scripts/python.exe" "$(VENV_DIR)"; else printf "%s/bin/python" "$(VENV_DIR)"; fi)
 PIP = $(RUN_PYTHON) -m pip
 
 .DEFAULT_GOAL := setup
 
-.PHONY: setup install install-dev install-gpu test test-contracts lint clean preflight demo demo-list hyperframes-doctor hyperframes-warm venv ensure-venv
+.PHONY: setup install install-dev install-gpu test test-contracts lint clean preflight demo demo-list hyperframes-doctor hyperframes-warm venv ensure-venv studio studio-doctor
 
 # ---- Virtual environment ----
 
@@ -94,6 +95,15 @@ test: ensure-venv
 
 test-contracts: ensure-venv
 	$(RUN_PYTHON) -m pytest tests/contracts/ -v
+
+# ---- OpenMontage Studio (web UI) ----
+
+studio: ensure-venv
+	@echo "==> Starting OpenMontage Studio on http://127.0.0.1:$(STUDIO_PORT)"
+	$(RUN_PYTHON) -m studio serve --port $(STUDIO_PORT) --warm
+
+studio-doctor: ensure-venv
+	$(RUN_PYTHON) -m studio doctor
 
 # ---- Utilities ----
 
