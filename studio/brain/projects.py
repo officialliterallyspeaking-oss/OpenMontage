@@ -301,10 +301,20 @@ class Project:
             "check": ["review", "final_review"],
             "publish": ["seo"],
         }
+        deliverable = (self.get("intent") or {}).get("deliverable")
         out = []
         for key, label in USER_STAGES:
             names = mapping[key]
             done = [n for n in names if self.has(n)]
+            # a still brief never renders or checks a video: say so instead of
+            # showing stages that look abandoned
+            if deliverable == "image" and key in {"produce", "check"} and not done:
+                out.append({
+                    "key": key, "label": label, "status": "not_applicable",
+                    "components": names, "completed": 0, "total": len(names),
+                    "reason": "not needed for a still brief",
+                })
+                continue
             if self.has("intent") is False and key == "understand":
                 state = "pending"
             elif len(done) == len(names):

@@ -336,7 +336,7 @@ function startPolling() {
   tick();
 }
 
-const STAGE_ICON = { done: "✓", active: "", partial: "•", pending: "" };
+const STAGE_ICON = { done: "✓", active: "", partial: "•", pending: "", not_applicable: "–" };
 
 function renderProgress(project) {
   const stages = project.progress || [];
@@ -352,7 +352,9 @@ function renderProgress(project) {
           <div class="cs-stage is-${stage.status}">
             <div class="dot"><span>${STAGE_ICON[stage.status] || ""}</span></div>
             <div class="label">${esc(stage.label)}</div>
-            <div class="meta">${stage.completed}/${stage.total}</div>
+            <div class="meta">${stage.status === "not_applicable"
+              ? esc(stage.reason || "not needed")
+              : `${stage.completed}/${stage.total}`}</div>
           </div>`).join("")}
       </div>
       <aside class="cs-feed">
@@ -410,7 +412,11 @@ function renderProject() {
           ${render ? `<span class="badge ${provKind === "warn" ? "warn" : ""}">${esc(provLabel)}</span>` : ""}
         </div>
         <div class="cs-actions" style="margin-top:12px">
-          ${render ? `<a class="cs-ghost" href="${mediaUrl(project.id, render.url)}" download>Download</a>` : ""}
+          ${render
+            ? `<a class="cs-ghost" href="${mediaUrl(project.id, render.url)}" download>Download video</a>`
+            : (assets?.assets?.length
+                ? `<a class="cs-ghost" href="${mediaUrl(project.id, assets.assets[0].url)}" download>Download image</a>`
+                : "")}
           <button class="cs-ghost" id="newBtn">New campaign</button>
           ${seo ? `<button class="cs-ghost" id="copyCaption">Copy caption</button>` : ""}
         </div>
@@ -762,7 +768,24 @@ function packagePanel(project) {
 function qualityPanel(project) {
   const review = pick(project, "final_review");
   const findings = pick(project, "review");
-  if (!review) return `<div class="cs-empty">Quality checks run after the render.</div>`;
+  const intent = pick(project, "intent") || {};
+  if (!review) {
+    if (intent.deliverable === "image") {
+      const assets = pick(project, "assets")?.assets || [];
+      return `<div class="cs-panel">
+        <div class="cs-card">
+          <h3>Still brief — no video to check</h3>
+          <p>${assets.length} frame(s) were produced. You asked for an image, so the studio stopped
+             there instead of rendering a film you did not ask for.</p>
+        </div>
+        <div class="cs-card">
+          <h3>Where the frames came from</h3>
+          <p>${esc(provenanceSummary(state.project))}</p>
+        </div>
+      </div>`;
+    }
+    return `<div class="cs-empty">Quality checks run after the render.</div>`;
+  }
   const checks = review.checks || {};
   const technical = checks.technical_probe || {};
   const subtitles = checks.subtitle_check || {};

@@ -165,6 +165,8 @@
 }
 .cs-stage.is-active .dot span { display: none; }
 .cs-stage.is-partial .dot { border-color: var(--warn); color: var(--warn); }
+.cs-stage.is-not_applicable .dot { border-color: var(--line-soft); color: var(--ink-3); background: transparent; }
+.cs-stage.is-not_applicable .label { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line); }
 .cs-stage .label { font-size: 15px; letter-spacing: -.01em; }
 .cs-stage.is-pending .label { color: var(--ink-3); }
 .cs-stage .meta { font-size: 11.5px; color: var(--ink-3); font-family: var(--mono); }
