@@ -13,6 +13,51 @@ prompt → image, prompt → video, image → video.
 The repository **is** the backend. Both surfaces call the same `tools/` the agent
 calls; nothing is reimplemented in the frontend.
 
+## Interface
+
+The Studio is one screen per job — create, watch, review, browse — with a single
+visual system in `ui/campaigns.css`. Everything below is load-bearing, not taste.
+
+**Type.** Instrument Serif (display, self-hosted in `ui/fonts/`) against Inter for
+UI text. The serif is used only where the page is speaking in its own voice —
+the headline, the campaign title, a score. Controls, labels and body copy are
+sans, so "what the studio decided" always reads differently from "what you
+operate". No webfont CDN: the two files total 152 KB and load from `/ui/fonts/`.
+
+**Colour.** Near-black neutrals (`--bg` … `--surface-3`) with one hot accent
+(`--flare`) that only ever means *the studio is acting* or *this is the thing to
+press*. Each of the four systems owns a hue — director amber, creative blue,
+producer green, growth violet — so a progress log, a cast card and a shot's
+provenance badge all agree at a glance. Ink levels are tuned to clear WCAG AA on
+every surface: `--ink-2` 10.7:1, `--ink-3` 5.4:1, `--ink-4` 4.7:1.
+
+**Space.** One 4→72px ramp (`--gap-*`) and `clamp()` page padding. Stages, cards
+and panels all sit on the same vertical rhythm so nothing needs bespoke margins.
+
+**States.** Every asynchronous thing has four: idle, working (meter + pulsing
+stage dot + live feed), partial (`is-partial` on a stage), and stopped (a resume
+card that keeps finished work). Empty states are written, not blank: "No
+campaigns yet — start with a sentence or a photograph."
+
+**Motion.** 140/260/520ms on one easing family; 60ms stagger on entry. Motion is
+only used to explain a change (frame filing in, tab swap, ring filling) and the
+whole file collapses to ~0ms under `prefers-reduced-motion`.
+
+**Responsiveness.** Three real breakpoints: 1180 (two-column panels collapse),
+980 (hero stacks), 700 (bar becomes two rows, the create box moves above the
+credits card, the player caps at 62vh so the title is not pushed off-screen).
+
+**Accessibility.** Skip link, visible focus ring, labelled selects and textarea,
+tablist with arrow-key support and roving `tabindex`, `aria-current` on nav,
+`role="progressbar"` plus a polite live region for stage changes, focus-trapped
+theatre overlay that returns focus on close, and 44px targets on touch layouts.
+
+**Honesty as UI.** Provenance is a first-class visual: `From your image`,
+`Model generated`, or `Local preview · no model`, carried from the frame to the
+package to the quality report. The Quality tab states the search-volume and
+view-count limits in the interface, not just in the docs.
+
+
 ```
 Browser ──► studio/api_projects.py ──► studio/brain/orchestrator.py
                                             ├─ director.py    System 1 · Viral Content Director
