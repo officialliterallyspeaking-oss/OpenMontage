@@ -24,6 +24,7 @@ const S = {
   stageSince: null,
   lastStage: null,
   tick: null,
+  recent: null,
 };
 
 /* ── templating ──────────────────────────────────────────────────── */
@@ -338,6 +339,30 @@ function castCard() {
     </aside>`;
 }
 
+function firstRun() {
+  const steps = [
+    ["Type a sentence", "One line is enough. The director reads it, scores the angles and picks one."],
+    ["Watch it get made", "Six honest stages — frames, cut, captions, checks — each one labelled as it runs."],
+    ["Review and refine", "Change one thing and only what depends on it rebuilds: no starting over."],
+    ["Download and post", "A vertical master, a cover, and a caption with hashtags and a sound brief."],
+  ];
+  return html`
+    <section class="cs-first cs-in" aria-label="How the studio works">
+      <div class="cs-first-head">
+        <span class="cs-eyebrow">First time here</span>
+        <p>Nothing has been made yet. Here is the whole loop.</p>
+      </div>
+      <ol class="cs-first-steps">
+        ${steps.map(([title, body], index) => html`
+          <li>
+            <span class="n">${String(index + 1).padStart(2, "0")}</span>
+            <strong>${title}</strong>
+            <span>${body}</span>
+          </li>`)}
+      </ol>
+    </section>`;
+}
+
 function renderCreate() {
   stopPolling();
   const path = PATHS[S.path];
@@ -415,6 +440,8 @@ function renderCreate() {
           <div class="cs-dock-examples" id="examples"></div>
         </div>
       </section>
+
+      ${S.recent === null ? "" : S.recent.length ? "" : firstRun()}
 
       <section class="cs-next cs-in" aria-label="What happens next">
         ${STAGE_MAP.map((stage) => html`
