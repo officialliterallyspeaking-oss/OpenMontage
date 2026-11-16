@@ -22,7 +22,7 @@ import random
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -190,6 +190,28 @@ def _fit_font(
     return font, _wrap(draw, text, font, max_width)[:max_lines]
 
 
+def _fit_with(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    make_font,
+    max_width: int,
+    max_lines: int,
+    start: int,
+    minimum: int,
+) -> tuple[ImageFont.FreeTypeFont, list[str]]:
+    """Fit text to a line budget using any font factory (serif, ui, fallback)."""
+    size = start
+    while size > minimum:
+        font = make_font(size)
+        lines = _wrap(draw, text, font, max_width)
+        if len(lines) <= max_lines:
+            return font, lines
+        size -= max(2, size // 16)
+    font = make_font(minimum)
+    return font, _wrap(draw, text, font, max_width)[:max_lines]
+
+
+
 def _tracked_text(
     draw: ImageDraw.ImageDraw,
     xy: tuple[int, int],
@@ -225,6 +247,156 @@ def _chip(
     return w, h
 
 
+# ── type, shared with the interface ────────────────────────────────────
+# The frames are rendered server-side, so they cannot use the woff2 files
+# the browser loads. `studio/assets/fonts/` holds TTF builds of the same
+# two families (Instrument Serif + Inter) so a composed frame and the app
+# around it are visibly the same product.
+
+FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+
+
+def _font_file(name: str) -> str | None:
+    candidate = FONT_DIR / name
+    return str(candidate) if candidate.exists() else None
+
+
+def _display_font(size: int) -> ImageFont.FreeTypeFont:
+    """The headline face: a high-contrast serif, or the best local fallback."""
+    for name in ("instrument-serif-400.ttf",):
+        path = _font_file(name)
+        if path:
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                pass
+    return _font(size, bold=True)
+
+
+def _ui_font(size: int, weight: int = 400) -> ImageFont.FreeTypeFont:
+    for name in (f"inter-{weight}.ttf", "inter-400.ttf"):
+        path = _font_file(name)
+        if path:
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                pass
+    return _font(size, bold=weight >= 600)
+
+
+# ── composition primitives ────────────────────────────────────────────
+
+def _hairline(draw: ImageDraw.ImageDraw, points, fill, width: int = 1) -> None:
+    draw.line(points, fill=fill, width=width)
+
+
+def _soft_disc(size, centre, radius: float, colour, strength: float) -> Image.Image:
+    """A soft light disc, rendered at low resolution then scaled up."""
+    return _radial_light(size, centre, radius, colour, strength)
+
+
+def _composition_aperture(size, ink, accent, second, base, rng):
+    """A field of light with a hard-edged disc cut into it: a lens, a sun."""
+    w, h = size
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    cx, cy = int(w * 0.60), int(h * 0.375)
+    r = int(w * 0.30)
+    disc = Image.new("RGBA", size, (0, 0, 0, 0))
+    dd = ImageDraw.Draw(disc)
+    dd.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*accent, 255))
+    # inside the disc only: a darker lower band, so it reads as a printed
+    # object catching light rather than as a rectangle on the page
+    band = Image.new("RGBA", size, (0, 0, 0, 0))
+    bd = ImageDraw.Draw(band)
+    bd.rectangle([cx - r, cy + int(r * 0.72), cx + r, cy + r],
+                 fill=(*_mix(accent, base, 0.30), 255))
+    # paint the band inside the disc only: mask = band alpha AND disc alpha
+    mask = ImageChops.multiply(band.split()[3], disc.split()[3])
+    disc.paste(band, (0, 0), mask)
+    layer.alpha_composite(disc)
+    for i, frac in enumerate((0.52, 0.40, 0.28)):
+        rr = int(w * frac)
+        d.arc([cx - rr, cy - rr, cx + rr, cy + rr],
+              start=-150, end=72, fill=(*ink, 96 - i * 22), width=max(2, int(w / 700)))
+    return layer
+
+
+def _composition_column(size, ink, accent, second, base, rng):
+    """A committed vertical band of colour, cut by a light disc."""
+    w, h = size
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    x0, x1 = int(w * 0.50), int(w * 0.92)
+    top, bottom = int(h * 0.16), int(h * 0.545)
+    d.rectangle([x0, top, x1, bottom], fill=(*second, 225))
+    d.rectangle([x0, top, x1, int(top + (bottom - top) * 0.07)], fill=(*accent, 255))
+    cx, cy, r = int(w * 0.71), int(h * 0.40), int(w * 0.185)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*ink, 255))
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(*accent, 255), width=max(2, int(w / 460)))
+    # a measure scale: five ticks, printerly
+    for i in range(5):
+        y = int(h * (0.20 + i * 0.05))
+        d.line([(int(w * 0.085), y), (int(w * 0.085) + int(w * 0.022), y)],
+               fill=(*ink, 120), width=max(1, int(w / 900)))
+    return layer
+
+
+def _composition_horizon(size, ink, accent, second, base, rng):
+    """Landscape logic: a luminous band, a horizon, a sun sitting on it."""
+    w, h = size
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    horizon = int(h * 0.455)
+    r = int(w * 0.20)
+    cx = int(w * 0.60)
+    # the sun sits on the line, its lower arc clipped by the ground plane
+    d.ellipse([cx - r, horizon - 2 * r, cx + r, horizon], fill=(*ink, 255))
+    d.rectangle([0, horizon, w, horizon + int(h * 0.010)], fill=(*accent, 255))
+    ground = Image.new("RGBA", size, (0, 0, 0, 0))
+    gd = ImageDraw.Draw(ground)
+    gd.rectangle([0, horizon + int(h * 0.010), w, int(h * 0.545)],
+                 fill=(*_mix(second, base, 0.20), 150))
+    ground = ground.filter(ImageFilter.GaussianBlur(w / 90))
+    layer.alpha_composite(ground)
+    return layer
+
+
+def _composition_plates(size, ink, accent, second, base, rng):
+    """Offset plates: a printed object, seen flat, stacked in space."""
+    w, h = size
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    bw, bh = int(w * 0.52), int(h * 0.30)
+    x0, y0 = int(w * 0.30), int(h * 0.13)
+    step = int(w * 0.065)
+    d.rounded_rectangle([x0, y0, x0 + bw, y0 + bh], radius=int(w * 0.01),
+                        fill=(*second, 235))
+    d.rounded_rectangle([x0 + step, y0 + step, x0 + bw + step, y0 + bh + step],
+                        radius=int(w * 0.01), fill=(*accent, 255))
+    d.rounded_rectangle([x0 + step * 2, y0 + step * 2, x0 + bw + step * 2, y0 + bh + step * 2],
+                        radius=int(w * 0.01), fill=(*ink, 255))
+    d.rectangle([x0 + step * 2, y0 + bh + step * 2 - int(h * 0.026),
+                 x0 + step * 2 + int(w * 0.14), y0 + bh + step * 2], fill=(*accent, 255))
+    return layer
+
+
+def _composition_field(size, ink, accent, second, base, rng):
+    """Typographic field: a ghost glyph, a hard bar, one dot of accent."""
+    w, h = size
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    ghost = _display_font(int(w * 0.70))
+    d.text((int(w * 0.34), int(h * 0.085)), "M", font=ghost, fill=(*ink, 34))
+    d.rectangle([0, int(h * 0.44), int(w * 0.40), int(h * 0.455)], fill=(*accent, 255))
+    d.ellipse([int(w * 0.72), int(h * 0.20), int(w * 0.72) + int(w * 0.05),
+               int(h * 0.20) + int(w * 0.05)], fill=(*accent, 255))
+    return layer
+
+
+COMPOSITIONS = (_composition_aperture, _composition_column,
+                _composition_horizon, _composition_plates, _composition_field)
+
 def design_frame(
     out_path: str | Path,
     *,
@@ -256,22 +428,20 @@ def design_frame(
         accent = _mix(accent, ink, 0.62)
     rng = _seed(headline, kicker, variant, style)
 
-    # --- ground: a mesh of blurred colour fields, not a flat gradient ------
-    img = _vertical_gradient(size, base, _mix(base, second, 0.22))
-    blobs = [
-        (rng.uniform(0.05, 0.95), rng.uniform(0.05, 0.45), rng.uniform(0.35, 0.75), second, 0.55),
-        (rng.uniform(0.05, 0.95), rng.uniform(0.35, 0.80), rng.uniform(0.30, 0.65), accent, 0.42),
-        (rng.uniform(0.00, 1.00), rng.uniform(0.55, 1.00), rng.uniform(0.40, 0.80),
-         _mix(base, ink, 0.35), 0.30),
-        (rng.uniform(0.00, 1.00), rng.uniform(0.00, 0.30), rng.uniform(0.45, 0.85), accent, 0.20),
-    ]
-    for cx, cy, radius, colour, strength in blobs:
+    # --- ground: a decisive dark field --------------------------------------
+    # Posters work because the ground is committed to one value. Everything
+    # else in the frame is then either light or accent, never mush.
+    deep = _mix(base, (0, 0, 0), 0.55)
+    img = _vertical_gradient(size, deep, _mix(base, second, 0.16))
+    # one broad wash of the support colour high in the frame, then the accent
+    # low and off-axis. Two lights, clearly placed, read as a photograph.
+    for cx, cy, radius, colour, strength in [
+        (0.68, 0.16, 0.85, second, 0.42),
+        (0.22, 0.86, 0.80, accent, 0.30),
+    ]:
         layer = _radial_light(size, (cx, cy), radius, colour, strength)
-        # screen keeps the light visible instead of letting it collapse to black
-        from PIL import ImageChops
-
-        img = ImageChops.screen(img, layer.point(lambda v: int(v * 0.55)))
-        img = Image.blend(img, ImageChops.screen(img, layer), 0.22)
+        img = Image.composite(ImageChops.screen(img, layer), img,
+                              layer.convert("L").point(lambda v: int(v * 0.75)))
 
     # a soft directional sweep gives the mesh a light source
     sweep = Image.new("L", (max(8, width // 16), max(8, height // 16)), 0)
@@ -298,114 +468,168 @@ def design_frame(
         except Exception:
             pass
 
-    # --- geometric composition: quiet arcs / rules tied to the variant ------
-    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
-    odraw = ImageDraw.Draw(overlay)
-    if style in {"editorial", "cinematic"}:
-        cx = int(width * rng.uniform(0.35, 0.75))
-        cy = int(height * rng.uniform(0.30, 0.55))
-        for i, radius in enumerate((width * 0.72, width * 0.52, width * 0.34)):
-            alpha = int(28 - i * 6)
-            odraw.ellipse(
-                [cx - radius, cy - radius, cx + radius, cy + radius],
-                outline=(*ink, max(8, alpha)),
-                width=max(2, int(width / 420)),
-            )
-    elif style == "graphic":
-        # a short vertical rule at the margin, never a full-bleed band across the type
-        bar_h = int(height * 0.09)
-        odraw.rectangle([int(width * 0.045), int(height * 0.30),
-                         int(width * 0.045) + max(4, int(width / 240)), int(height * 0.30) + bar_h],
-                        fill=(*accent, 120))
-    # hero form: a soft sculptural object in the middle band, so the frame has
-    # a subject instead of empty space. Variant-driven shape and placement.
-    form = Image.new("RGBA", size, (0, 0, 0, 0))
-    fdraw = ImageDraw.Draw(form)
-    cx = int(width * (0.50 + (variant % 3 - 1) * 0.10))
-    cy = int(height * 0.545)
-    radius = int(width * (0.30 + (variant % 2) * 0.05))
-    rim = Image.new("RGBA", size, (0, 0, 0, 0))
-    rdraw = ImageDraw.Draw(rim)
-    # two offset forms read as depth rather than as a placeholder rectangle
-    box = [cx - radius, cy - radius, cx + radius, cy + radius]
-    fdraw.ellipse(box, fill=(*second, 105))
-    inner = int(radius * 0.62)
-    fdraw.ellipse([cx - inner, cy - inner - int(radius * 0.10),
-                   cx + inner, cy + inner - int(radius * 0.10)], fill=(*accent, 70))
-    rdraw.arc(box, start=200 + variant * 26, end=345 + variant * 26,
-              fill=(*accent, 190), width=max(3, int(width / 240)))
-    rdraw.arc([cx - inner, cy - inner, cx + inner, cy + inner],
-              start=20 + variant * 18, end=150 + variant * 18,
-              fill=(*ink, 90), width=max(2, int(width / 360)))
-    form = form.filter(ImageFilter.GaussianBlur(radius * 0.05))
-    rim = rim.filter(ImageFilter.GaussianBlur(max(1, radius * 0.02)))
-    overlay = Image.alpha_composite(Image.alpha_composite(overlay, form), rim)
-    odraw = ImageDraw.Draw(overlay)
+    # --- composition: a layered still life, not a smudge -------------------
+    # Every frame is built in three planes: a defocused backplate that gives
+    # depth, a crisp middle plane that carries the geometry, and type on top.
+    # The variant chooses the composition, so four shots read as four ideas
+    # rather than four rearrangements of the same blob.
+    composition = COMPOSITIONS[variant % len(COMPOSITIONS)]
+    mid = composition(size, ink, accent, second, base, rng)
 
-    # editorial corner ticks: a thin crop-mark frame that reads as "designed"
-    tick = max(2, int(width / 360))
-    arm = int(width * 0.055)
+    # a defocused echo behind the crisp plane gives depth without haze
+    echo = mid.filter(ImageFilter.GaussianBlur(int(width * 0.018)))
+    er, eg, eb, ea = echo.split()
+    echo = Image.merge("RGBA", (er, eg, eb, ea.point(lambda v: int(v * 0.34))))
+
+    img = Image.alpha_composite(img.convert("RGBA"), echo)
+    img = Image.alpha_composite(img, mid)
+
+    # a single directional light from one corner, very soft
+    leak = Image.new("RGBA", size, (0, 0, 0, 0))
+    ld = ImageDraw.Draw(leak)
+    lx = int(width * rng.uniform(0.05, 0.95))
+    ld.ellipse([lx - int(width * 0.9), -int(height * 0.35),
+                lx + int(width * 0.9), int(height * 0.42)],
+               fill=(*_mix(ink, accent, 0.35), 26))
+    img = Image.alpha_composite(img, leak.filter(ImageFilter.GaussianBlur(width / 9)))
+
+    # --- optional real texture: the uploaded photograph, deeply treated ------
+    if texture_source and Path(texture_source).exists():
+        try:
+            photo = Image.open(texture_source).convert("RGB")
+            photo = _cover(photo, size)
+            photo = ImageEnhance.Color(photo).enhance(0.55)
+            photo = ImageOps_colorize(photo, ink, second)
+            photo = photo.filter(ImageFilter.GaussianBlur(width / 260))
+            # keep the photograph readable: it is the subject, not a wash
+            treated = Image.new("RGBA", size, (0, 0, 0, 0))
+            treated.paste(photo, (0, 0))
+            treated.putalpha(Image.new("L", size, 196))
+            img = Image.alpha_composite(img, treated)
+        except Exception:
+            pass
+
+    # the caption stage (roughly 60-79% of the height) gets a soft well so
+    # burned captions always have a quiet ground to sit on
+    well = Image.new("RGBA", size, (0, 0, 0, 0))
+    wd = ImageDraw.Draw(well)
+    wd.rectangle([0, int(height * 0.575), width, int(height * 0.815)], fill=(*deep, 110))
+    well = well.filter(ImageFilter.GaussianBlur(width / 26))
+    img = Image.alpha_composite(img, well)
+
+    # editorial crop marks: a thin corner frame that reads as "designed"
+    marks = Image.new("RGBA", size, (0, 0, 0, 0))
+    md = ImageDraw.Draw(marks)
+    tick = max(2, int(width / 420))
+    arm = int(width * 0.045)
     pad = int(width * 0.045)
     for (x, y, dx, dy) in [
         (pad, pad, 1, 1),
         (width - pad, pad, -1, 1),
-        (pad, height - pad, 1, -1),
         (width - pad, height - pad, -1, -1),
+        (pad, height - pad, 1, -1),
     ]:
-        odraw.line([(x, y), (x + arm * dx, y)], fill=(*ink, 70), width=tick)
-        odraw.line([(x, y), (x, y + arm * dy)], fill=(*ink, 70), width=tick)
-    img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+        md.line([(x, y), (x + arm * dx, y)], fill=(*ink, 56), width=tick)
+        md.line([(x, y), (x, y + arm * dy)], fill=(*ink, 56), width=tick)
+    img = Image.alpha_composite(img, marks)
 
-    # --- typography --------------------------------------------------------
-    # Layout contract with the caption layer: the design owns the top 55% of
-    # the frame, the bottom 30% is reserved for burned captions. Nothing here
+    # a plate of shade under the type, so the serif never fights the artwork
+    # the type needs a quiet ground, but only under itself: a soft dark
+    # column behind the text block, feathered at the edges, leaving the top
+    # of the frame and the caption stage untouched.
+    scrim = Image.new("RGBA", size, (0, 0, 0, 0))
+    sd = ImageDraw.Draw(scrim)
+    sd.rectangle([0, int(height * 0.20), int(width * 0.94), int(height * 0.585)],
+                 fill=(*deep, 132))
+    scrim = scrim.filter(ImageFilter.GaussianBlur(width / 18))
+    img = Image.alpha_composite(img, scrim)
+
+    # --- typography ---------------------------------------------------------
+    # Layout contract with the caption layer: the design owns the top 58% of
+    # the frame, the remainder is reserved for burned captions. Nothing here
     # may cross below `caption_reserve`.
     draw = ImageDraw.Draw(img)
     margin = int(width * 0.085)
     safe_top = int(height * 0.10)
     caption_reserve = int(height * 0.58)
-    ink_soft = _mix(ink, base, 0.30)
-
-    if kicker:
-        kicker_font = _font(max(18, int(width * 0.028)), bold=True)
-        _tracked_text(draw, (margin, safe_top), kicker.upper()[:46], kicker_font, accent,
-                      tracking=width * 0.0042)
-
+    strip_y = int(height * 0.545)
+    ink_soft = _mix(ink, base, 0.26)
     max_text_width = width - margin * 2
-    head_font, lines = _fit_font(draw, headline, max_text_width, 3, int(width * 0.098),
-                                 int(width * 0.044))
-    line_height = int(head_font.size * 1.18)
+
+    # kicker: a small square of accent, then tracked caps
+    if kicker:
+        kf = _ui_font(max(16, int(width * 0.0205)), 600)
+        ky = safe_top - int(height * 0.004)
+        square = max(3, int(width * 0.007))
+        draw.rectangle([margin, ky + int(kf.size * 0.42),
+                        margin + square, ky + int(kf.size * 0.42) + square], fill=accent)
+        _tracked_text(draw, (margin + int(width * 0.026), ky), kicker.upper()[:44], kf,
+                      _mix(ink, base, 0.12), tracking=width * 0.0052)
+
+    # headline: the serif is the voice of the frame
+    head_font, lines = _fit_with(
+        draw, headline, _display_font, max_text_width, 3,
+        int(width * 0.128), int(width * 0.052),
+    )
+    line_height = int(head_font.size * 1.06)
     block_height = line_height * len(lines)
 
+    body_font, body_lines = None, []
     if body:
-        body_font = _font(max(19, int(width * 0.030)), bold=False)
-        body_lines = _wrap(draw, body, body_font, max_text_width)[:2]
-        body_height = int(body_font.size * 1.4) * len(body_lines)
-    else:
-        body_font, body_lines, body_height = None, [], 0
+        body_font = _ui_font(max(19, int(width * 0.0275)), 400)
+        body_lines = _wrap(draw, body, body_font, int(max_text_width * 0.94))[:2]
+    body_height = int(body_font.size * 1.55) * len(body_lines) if body_lines else 0
 
-    total = block_height + (int(height * 0.022) + body_height if body_lines else 0)
-    # anchor the block in the upper half, between the kicker and the reserve
-    head_y = int(height * 0.27)
-    head_y = min(head_y, caption_reserve - total - int(height * 0.04))
-    head_y = max(safe_top + int(height * 0.09), head_y)
+    gap = int(height * 0.026) if body_lines else 0
+    strip_pad = int(height * 0.011)
+    total = block_height + (gap + body_height if body_lines else 0)
+    head_y = strip_y - strip_pad - total
+    head_y = max(head_y, safe_top + int(height * 0.085))
 
     # accent rule above the headline
-    rule_y = head_y - int(height * 0.030)
-    draw.rectangle([margin, rule_y, margin + int(width * 0.13), rule_y + max(4, int(height / 320))],
-                   fill=accent)
+    rule_y = head_y - int(height * 0.028)
+    draw.rectangle([margin, rule_y, margin + int(width * 0.11),
+                    rule_y + max(3, int(height / 420))], fill=accent)
 
     y = head_y
     for line in lines:
-        draw.text((margin + 2, y + 3), line, font=head_font, fill=_mix(base, (0, 0, 0), 0.45))
+        draw.text((margin + 2, y + 3), line, font=head_font, fill=_mix(deep, (0, 0, 0), 0.55))
         draw.text((margin, y), line, font=head_font, fill=ink)
         y += line_height
 
     if body_lines:
-        y += int(height * 0.022)
+        y += gap
         for line in body_lines:
             draw.text((margin, y), line, font=body_font, fill=ink_soft)
-            y += int(body_font.size * 1.40)
+            y += int(body_font.size * 1.55)
+
+    # data strip: the frame names itself, like a contact sheet
+    strip_font = _ui_font(max(14, int(width * 0.0165)), 500)
+    draw.line([(margin, strip_y), (width - margin, strip_y)],
+              fill=(*ink, 52), width=max(1, int(width / 1000)))
+    draw.text((margin, strip_y + strip_pad), f"FRAME {variant + 1:02d}",
+              font=strip_font, fill=_mix(ink, base, 0.44))
+    right = "LOCAL COMPOSITION"
+    rw = draw.textlength(right, font=strip_font) + len(right) * (width * 0.0032)
+    _tracked_text(draw, (width - margin - int(rw), strip_y + strip_pad), right,
+                  strip_font, _mix(ink, base, 0.44), tracking=width * 0.0032)
+
+    # --- footer: the frame signs itself, below where captions land ----------
+    foot = Image.new("RGBA", size, (0, 0, 0, 0))
+    fd2 = ImageDraw.Draw(foot)
+    fy = int(height * 0.865)
+    fd2.line([(margin, fy), (width - margin, fy)], fill=(*ink, 30), width=max(1, int(width / 1200)))
+    ff = _ui_font(max(12, int(width * 0.0145)), 500)
+    _tracked_text(fd2, (margin, fy + int(height * 0.012)), "OPENMONTAGE STUDIO",
+                  ff, _mix(ink, base, 0.55), tracking=width * 0.0045)
+    right_txt = f"{width}×{height}"
+    rw2 = fd2.textlength(right_txt, font=ff)
+    fd2.text((width - margin - rw2, fy + int(height * 0.012)), right_txt, font=ff,
+             fill=_mix(ink, base, 0.55))
+    # one accent tick, bottom-left, so the footer has a pulse
+    fd2.rectangle([margin, fy - int(height * 0.007), margin + int(width * 0.018),
+                   fy - int(height * 0.007) + max(2, int(height / 700))], fill=(*accent, 230))
+    img = Image.alpha_composite(img, foot)
 
     # --- provenance chip: top-right, clear of the caption band --------------
     if label:
@@ -423,9 +647,12 @@ def design_frame(
         )
 
     # --- finishing ---------------------------------------------------------
-    img = ImageEnhance.Contrast(img).enhance(1.10)
-    img = ImageEnhance.Color(img).enhance(1.06)
-    img = _vignette(img, 0.32 if size[1] > size[0] else 0.24)
+    img = img.convert("RGB")
+    img = ImageEnhance.Contrast(img).enhance(1.08)
+    img = ImageEnhance.Color(img).enhance(1.04)
+    bloom = img.filter(ImageFilter.GaussianBlur(max(6, int(width * 0.022))))
+    img = ImageChops.screen(img, bloom.point(lambda v: int(v * 0.20)))
+    img = _vignette(img, 0.30 if size[1] > size[0] else 0.22)
     img = _grain(img, 0.030, rng)
     img.save(out_path, quality=94, subsampling=1)
 

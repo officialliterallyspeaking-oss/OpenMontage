@@ -107,3 +107,6 @@ venv/
 
 # OpenMontage Studio — job index + uploaded source images (local only)
 studio_state/
+
+# Node harness deps (jsdom/puppeteer live outside the repo)
+node_modules/

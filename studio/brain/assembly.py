@@ -152,6 +152,9 @@ def _ass_time(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{secs:05.2f}"
 
 
+CAPTION_FAMILY = "Inter"
+
+
 def _ass_colour(hex_colour: str, alpha: int = 0) -> str:
     value = hex_colour.lstrip("#")
     if len(value) == 3:
@@ -195,14 +198,14 @@ def write_ass(
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
         "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
         "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        f"Style: Caption,DejaVu Sans,{caption_size},{_ass_colour(ink)},"
+        f"Style: Caption,{CAPTION_FAMILY},{caption_size},{_ass_colour(ink)},"
         f"{_ass_colour(ink)},&H00000000,&H64000000,-1,0,0,0,100,100,0.5,0,1,"
         f"{max(3, caption_size // 12)},0,2,{int(width * 0.10)},{int(width * 0.10)},{margin_v},1",
-        f"Style: Label,DejaVu Sans,{label_size},{_ass_colour(accent)},"
+        f"Style: Label,{CAPTION_FAMILY},{label_size},{_ass_colour(accent)},"
         f"{_ass_colour(accent)},&H00000000,&H64000000,-1,0,0,0,100,100,2.5,0,1,"
         f"{max(2, label_size // 14)},0,8,{int(width * 0.08)},{int(width * 0.08)},"
         f"{int(height * 0.10)},1",
-        f"Style: CTA,DejaVu Sans,{int(caption_size * 0.82)},{_ass_colour(ground)},"
+        f"Style: CTA,{CAPTION_FAMILY},{int(caption_size * 0.82)},{_ass_colour(ground)},"
         f"{_ass_colour(ground)},&H00000000,{_ass_colour(accent, 0x00)},-1,0,0,0,100,100,0.5,0,"
         f"3,0,0,2,{int(width * 0.08)},{int(width * 0.08)},{margin_v},1",
         "",
@@ -276,7 +279,10 @@ def burn_captions(src: Path, out: Path, ass_path: Path, scrim: Path | None = Non
     out.parent.mkdir(parents=True, exist_ok=True)
     # subtitles filter needs an escaped path and a font that exists on disk
     escaped = str(ass_path.resolve()).replace("\\", "/").replace(":", r"\:")
-    fonts_dir = Path("/usr/share/fonts")
+    # burn with the same Inter the interface uses; fall back to system fonts
+    # only when the bundled ones are missing
+    bundled = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+    fonts_dir = bundled if bundled.is_dir() and any(bundled.glob("*.ttf")) else Path("/usr/share/fonts")
     subs = f"subtitles='{escaped}'"
     if fonts_dir.is_dir():
         subs += f":fontsdir='{fonts_dir}'"
