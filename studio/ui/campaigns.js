@@ -162,6 +162,30 @@ async function copy(text, label) {
   }
 }
 
+/* ── reveal on scroll ────────────────────────────────────────────── */
+// Sections arrive as you reach them rather than all at once on load. It is
+// decoration, so it degrades to "visible" whenever it cannot run.
+let revealer = null;
+function armReveal() {
+  if (revealer) revealer.disconnect();
+  const targets = $$(".cs-reveal");
+  if (!targets.length) return;
+  if (!("IntersectionObserver" in window) ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    targets.forEach((node) => node.classList.add("is-revealed"));
+    return;
+  }
+  revealer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-revealed");
+        revealer.unobserve(entry.target);
+      }
+    });
+  }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
+  targets.forEach((node) => revealer.observe(node));
+}
+
 /* ── chrome ──────────────────────────────────────────────────────── */
 
 function setMode(mode, { silent } = {}) {
@@ -912,6 +936,11 @@ function renderProject() {
     </div>`;
 
   mount(main(), template);
+  $$(".cs-detail > .cs-in, .cs-reel > *").forEach((node, index) => {
+    node.classList.add("cs-reveal");
+    node.style.transitionDelay = `${Math.min(index * 60, 300)}ms`;
+  });
+  armReveal();
   wireProject(project);
   renderTab();
 }
@@ -1037,6 +1066,11 @@ function renderTab() {
   };
   const build = builders[S.tab] || decisionPanel;
   mount(host, build(project));
+  $$(".cs-section, .cs-verdict, .cs-switch", host).forEach((node, index) => {
+    node.classList.add("cs-reveal");
+    node.style.transitionDelay = `${Math.min(index * 55, 320)}ms`;
+  });
+  armReveal();
   wireTab(project);
 }
 

@@ -1212,6 +1212,15 @@ a { color: inherit; }
 }
 @keyframes cs-rot { to { transform: rotate(360deg); } }
 
+/* scroll reveals: content arrives as you reach it, and is simply present
+   when the browser cannot animate or the reader asked for less motion */
+.cs-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity var(--slow) var(--ease-out), transform var(--slow) var(--ease-out);
+}
+.cs-reveal.is-revealed { opacity: 1; transform: none; }
+
 /* staggered entrance for major blocks */
 .cs-in { animation: cs-in var(--slow) var(--ease-out) both; }
 .cs-in:nth-child(2) { animation-delay: 60ms; }
@@ -1287,6 +1296,7 @@ a { color: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .cs-reveal { opacity: 1 !important; transform: none !important; }
   *, *::before, *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
