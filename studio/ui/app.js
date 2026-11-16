@@ -462,8 +462,13 @@ async function pollActive() {
   if (finished.length) {
     const last = finished[finished.length - 1];
     if (last.status === "done") {
-      toast(last.video ? "Video ready" : "Image ready");
-      openDetail(last.id);
+      toast(last.video ? "Video ready — it is in the gallery" : "Image ready — it is in the gallery");
+      const card = document.querySelector(`[data-job="${last.id}"]`);
+      if (card) {
+        card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        card.classList.add("is-fresh");
+        setTimeout(() => card.classList.remove("is-fresh"), 2200);
+      }
     } else {
       toast(`Run failed: ${last.error || "unknown error"}`, true);
     }
