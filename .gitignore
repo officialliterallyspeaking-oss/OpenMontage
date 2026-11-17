@@ -61,6 +61,11 @@ internal/
 # Local agent config (user-specific)
 .claude/memory/
 .claude/settings.local.json
+# MCP/profile file written by `rea setup` — holds absolute machine paths
+# (/usr/local/bin/rea, the caller-supplied analysis toolchain), so it is
+# local to the machine that ran setup. The REA workflow skill it installs
+# alongside this file *is* tracked: .claude/skills/reverse-engineer-anything/
+.claude/.claude.json
 
 # Agent skills lock (local install tracking)
 skills-lock.json
