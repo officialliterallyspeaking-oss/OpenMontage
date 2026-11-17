@@ -782,6 +782,12 @@ function elapsedLabel(project) {
   return seconds < 90 ? `${seconds}s` : `${Math.round(seconds / 60)} min`;
 }
 
+const EDIT_FORMATS = {
+  premiere_resolve: "Premiere / Resolve (.xml)",
+  final_cut: "Final Cut Pro (.fcpxml)",
+  edl: "EDL (.edl)",
+};
+
 function fact(label, value) {
   return html`<div><dt>${label}</dt><dd>${value}</dd></div>`;
 }
@@ -852,6 +858,9 @@ function renderProject() {
   const frames = assets?.assets || [];
   const isStill = intent?.deliverable === "image";
   const selected = concept?.selected;
+  // The editable timeline lives next to the render; older projects predate it,
+  // so this is optional rather than a required field.
+  const edit = project.edit || null;
 
   const tabs = [
     ["decision", "The decision"],
@@ -892,7 +901,22 @@ function renderProject() {
               <div class="cs-reel-secondary">
                 <a class="cs-ghost" href="${mediaUrl(project.id, render.poster_url || render.url)}" download="cover.jpg">Cover</a>
                 ${seo ? html`<button class="cs-ghost" id="copyCaption">Copy caption</button>` : ""}
-              </div>`
+              </div>
+              ${edit ? html`
+              <details class="cs-edit">
+                <summary>
+                  <span>Open this cut in your editor</span>
+                  <span class="cs-edit-meta">${edit.checks.clips} clips · ${edit.checks.duration_timecode}</span>
+                </summary>
+                <p class="cs-edit-note">
+                  The same cut, as an edit you can change — every clip sits on a track at the
+                  frame it was rendered to, so nothing shifts when you open it.
+                </p>
+                <div class="cs-edit-links">
+                  ${Object.entries(edit.download).map(([key, href]) => html`
+                    <a class="cs-ghost" href="${href}" download>${EDIT_FORMATS[key] || key}</a>`)}
+                </div>
+              </details>` : ""}`
               : frames.length ? html`
               <a class="cs-ghost primary wide" href="${mediaUrl(project.id, frames[0].url)}" download>
                 Download image

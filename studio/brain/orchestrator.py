@@ -157,6 +157,8 @@ class Orchestrator:
             project.event("studio", f"stopped at {project.stage}: {exc}",
                           trace=traceback.format_exc()[-1200:])
         finally:
+            if project.status == "complete":
+                self._write_timeline(project, project_dir)
             self._persist_artifacts(project, project_dir)
             self.store.save(project)
             if progress:
@@ -349,6 +351,88 @@ class Orchestrator:
         "review": "review.json",
         "final_review": "final_review.json",
     }
+
+    def _write_timeline(self, project: Project, project_dir: Path) -> dict[str, Any] | None:
+        """Hand the edit to a real NLE next to the render.
+
+        A finished MP4 is the wrong end of the job for anyone who wants to
+        recut a beat or fix a line: the only way to keep the work was to
+        rebuild it. This writes the same cut as FCP7 XML (Premiere, Resolve),
+        FCPXML (Final Cut Pro) and CMX 3600 EDL, so the piece can be finished
+        somewhere else without starting over.
+
+        Failure here never fails the project — the video is already correct and
+        is what most people came for — but it is reported rather than hidden.
+        """
+        import json
+
+        storyboard = project.get("storyboard") or {}
+        scenes = storyboard.get("scenes") or []
+        if not scenes:
+            return None
+        render = project.get("render") or {}
+        if not (project_dir / "renders" / "final.mp4").exists():
+            return None
+
+        linked = project.get("scene_assets") or {}
+        intent = project.get("intent") or {}
+        plan = project.get("visual_plan") or {}
+        width = int(plan.get("width") or (1080 if intent.get("platform") == "tiktok" else 1920))
+        height = int(plan.get("height") or (1920 if intent.get("platform") == "tiktok" else 1080))
+
+        clips = []
+        for scene in scenes:
+            asset = (linked.get(scene["id"]) or {}).get("asset_path")
+            if not asset:
+                continue
+            clips.append(
+                {
+                    "id": scene["id"],
+                    "name": f"{scene['id']} {scene.get('framing', '')}".strip(),
+                    "asset_path": str(Path(asset).resolve()),
+                    "start_seconds": float(scene["start_seconds"]),
+                    "end_seconds": float(scene["end_seconds"]),
+                }
+            )
+        if not clips:
+            return None
+
+        try:
+            from tools.publishers.timeline_export import TimelineExport
+
+            result = TimelineExport().execute(
+                {
+                    "scenes": clips,
+                    "title": project.title[:70],
+                    "out_dir": str(project_dir / "renders" / "timeline"),
+                    "fps": 30,
+                    "width": width,
+                    "height": height,
+                }
+            )
+        except Exception as exc:  # never lose a finished render to a write error
+            project.event("producer", f"Could not write the editable timeline: {exc}")
+            return None
+
+        if not result.success:
+            project.event("producer", f"Could not write the editable timeline: {result.error}")
+            return None
+
+        checks = result.data.get("checks") or {}
+        project.event(
+            "producer",
+            f"Wrote an editable timeline — Premiere, Resolve and Final Cut can open it "
+            f"({checks.get('clips', 0)} clips, {checks.get('duration_timecode', '')})",
+        )
+        return {
+            "files": {
+                "premiere_resolve": "timeline.xml",
+                "final_cut": "timeline.fcpxml",
+                "edl": "timeline.edl",
+            },
+            "checks": checks,
+            "seconds": result.data["timeline"]["seconds"],
+        }
 
     def _persist_artifacts(self, project: Project, project_dir: Path) -> None:
         """Write schema-shaped artifacts, validated by the repository's own schemas.

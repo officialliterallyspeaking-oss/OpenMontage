@@ -208,6 +208,37 @@ def create_project(request: CreateRequest) -> dict[str, Any]:
     return project.public()
 
 
+def _edit_payload(project) -> dict[str, Any] | None:
+    """The editable-timeline bundle, if this project produced one.
+
+    Read from disk rather than stored on the project, because the files are the
+    source of truth: if someone deletes the timeline, the button should go away
+    rather than point at nothing.
+    """
+    folder = _store().dir_for(project.id) / "renders" / "timeline"
+    manifest = folder / "timeline.json"
+    if not manifest.is_file():
+        return None
+    try:
+        import json
+
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    formats = {}
+    for key, filename in (data.get("formats") or {}).items():
+        if (folder / filename).is_file():
+            formats[key] = filename
+    if not formats:
+        return None
+    return {
+        "checks": data.get("checks") or {},
+        "formats": formats,
+        "download": {key: f"/api/studio/projects/{project.id}/edit/{name}"
+                     for key, name in formats.items()},
+    }
+
+
 @router.get("/projects")
 def list_projects() -> dict[str, Any]:
     projects = _store().list()
@@ -222,6 +253,7 @@ def get_project(project_id: str) -> dict[str, Any]:
     payload = project.public()
     payload["running"] = project_id in _running
     payload["refinements"] = ORCHESTRATOR.REFINEMENTS
+    payload["edit"] = _edit_payload(project)
     return payload
 
 
@@ -315,6 +347,17 @@ def project_media(project_id: str, filename: str):
         except HTTPException:
             continue
     raise HTTPException(404, "not found")
+
+
+@router.get("/projects/{project_id}/edit/{filename}")
+def project_edit(project_id: str, filename: str):
+    """Serve an exported NLE timeline (xml / fcpxml / edl) for download."""
+    project = _store().get(project_id)
+    if not project:
+        raise HTTPException(404, "project not found")
+    if Path(filename).name != filename or not filename.startswith("timeline."):
+        raise HTTPException(404, "not found")
+    return FileResponse(_safe(project, f"renders/timeline/{filename}"))
 
 
 @router.get("/projects/{project_id}/artifacts/{filename}")

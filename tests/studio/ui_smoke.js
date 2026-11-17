@@ -119,6 +119,23 @@ async function waitFor(window, fn, ms = 60000, step = 250) {
     check("video element or still present", !!d.querySelector(".cs-phone video, .cs-phone img"));
     check("download affordance", /Download (video|image)/.test(body()));
 
+    console.log("\n— editable timeline —");
+    const editBox = d.querySelector("details.cs-edit");
+    if (editBox) {
+      check("edit panel offered", /Open this cut in your editor/.test(editBox.textContent));
+      editBox.open = true;
+      const links = [...editBox.querySelectorAll("a[download]")];
+      check("edit panel links a real file per format", links.length >= 1, `${links.length} links`);
+      check("edit links point at the studio's own route",
+        links.every((a) => /\/edit\/timeline\.(xml|fcpxml|edl)$/.test(a.getAttribute("href"))),
+        links.map((a) => a.getAttribute("href")).join(" "));
+      check("edit panel counts clips honestly", /\d+ clips · \d{2}:\d{2}:\d{2}[:;]\d{2}/.test(editBox.textContent.trim()));
+      check("edit links are labelled for humans",
+        /Premiere \/ Resolve|Final Cut Pro|EDL/.test(editBox.textContent));
+    } else {
+      check("edit panel offered", false, "no details.cs-edit in the project view");
+    }
+
     console.log("\n— tabs —");
     for (const tab of ["package", "quality", "decision"]) {
       const btn = [...d.querySelectorAll(".cs-tab")].find((b) => b.dataset.tab === tab);

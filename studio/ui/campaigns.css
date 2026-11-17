@@ -796,6 +796,43 @@ a { color: inherit; }
 .cs-reel-secondary { display: flex; gap: 6px; }
 .cs-reel-secondary .cs-ghost { flex: 1; justify-content: center; }
 
+/* the editable timeline: an aside, because most people never open an NLE */
+.cs-edit {
+  margin-top: 2px; border: 1px solid var(--line-3); border-radius: var(--r-md);
+  background: var(--bg-2); overflow: hidden;
+}
+.cs-edit > summary {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 9px 11px; cursor: pointer; list-style: none;
+  font-size: 12.5px; color: var(--ink-1); font-weight: 500;
+}
+.cs-edit > summary::-webkit-details-marker { display: none; }
+.cs-edit > summary::after {
+  content: ""; width: 6px; height: 6px; margin-left: 2px;
+  border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(45deg) translateY(-1px); transition: transform .16s ease;
+  flex: none;
+}
+.cs-edit[open] > summary::after { transform: rotate(225deg) translateY(-1px); }
+.cs-edit > summary:hover { background: var(--bg-3); }
+.cs-edit-meta {
+  font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+  white-space: nowrap; flex: 1; text-align: right;
+}
+.cs-edit > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cs-edit-note {
+  margin: 0; padding: 0 11px 9px; font-size: 11.5px; line-height: 1.5; color: var(--ink-3);
+}
+.cs-edit-links {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 0 11px 11px;
+}
+.cs-edit-links .cs-ghost {
+  flex: 1 1 auto; justify-content: center; font-size: 11.5px; white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .cs-edit-links .cs-ghost { flex: 1 1 100%; }
+}
+
 /* campaign facts: a quiet dossier under the player */
 .cs-facts {
   margin: 2px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
