@@ -113,6 +113,37 @@ exports/
 publisher (e.g. a YouTube uploader) would be a separate `publish`-capability
 provider.
 
+### Step 5b: Hand Off an Editable Timeline (optional)
+
+An MP4 is a dead end for anyone who wants to change one cut or fix one line —
+they rebuild the edit from scratch. If the piece should be finishable
+elsewhere, also call `export_timeline` (capability `publish`, provider `local`,
+deterministic, offline):
+
+```python
+export_timeline({
+    "scenes": [{"asset_path": ".../shot_01.mp4", "start_seconds": 0.0, "end_seconds": 2.4}, ...],
+    "title": "...", "out_dir": "exports/<project>/timeline",
+    "fps": 30, "width": 1920, "height": 1080,
+})
+```
+
+It writes three interchange formats plus a manifest:
+
+| Key in `data["formats"]` | File | Opens in |
+|---|---|---|
+| `premiere_resolve` | `timeline.xml` | Premiere Pro (File > Import), DaVinci Resolve |
+| `final_cut` | `timeline.fcpxml` | Final Cut Pro (`.xml` of the same document would be read as FCP7) |
+| `edl` | `timeline.edl` | Anything, CMX 3600 — Avid, older grading suites |
+
+Frames are quantised half-up and clips that touch share a boundary frame, so
+the imported sequence is frame-for-frame identical to what was rendered; a gap
+in the cut becomes `BLACK` rather than silent drift. `data["checks"]` reports
+`continuous`, `holes`, `overlaps` and `duration_timecode` — **read them and
+report honestly**: a timeline with holes is still useful, but say so rather
+than claiming a clean conform. Missing source media does not fail the export
+(an editor relinks), but it is listed under `checks["missing_media"]`.
+
 ### Step 6: Build Publish Log
 
 `export_bundle` already returns a schema-valid `publish_log` in `data["publish_log"]` — persist that directly rather than hand-building one. Do **not** add extra entry fields (the schema sets `additionalProperties: false`; only `platform`, `status`, `url`, `video_id`, `visibility`, `export_path`, `timestamp`, `metadata_used`, `error` are allowed). The shape it returns:

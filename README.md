@@ -162,6 +162,32 @@ And when a run is done, hit **▶ REPLAY RUN** — the whole production replays 
 
 ---
 
+## Or Just Use The Browser — OpenMontage Studio
+
+Prefer clicking to prompting an agent? The repo ships a small web frontend that
+drives the same tools:
+
+```bash
+make studio          # → http://127.0.0.1:8000
+```
+
+One prompt becomes an image or a motion video; drop in your own image and it
+becomes a video with a camera move. Video works **with zero API keys** — stills
+are animated with FFmpeg (`ken_burns`, push-in, pull-back, pans, cross-fades) —
+and configuring a key in the **Keys** panel switches it to real image and video
+models without a restart.
+
+Every run writes a real project workspace (`projects/studio-*`) with schema-valid
+`brief` → `asset_manifest` → `render_report` artifacts and checkpoints, so the
+Backlot board shows it live like any other pipeline. See
+[`studio/README.md`](studio/README.md).
+
+> Without an image provider the Studio draws a clearly-labelled placeholder poster
+> from the prompt (using the style playbook palettes) and animates that, so you can
+> watch the whole flow before spending anything.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
