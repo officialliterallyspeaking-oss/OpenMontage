@@ -667,70 +667,136 @@ def design_frame(
     }
 
 
-def _photo_type_block(frame: Image.Image, name: str, kicker: str, index: int) -> Image.Image:
-    """Editorial type that sits *with* the photograph, not on top of the subject.
+def _photo_type_block(
+    frame: Image.Image,
+    name: str,
+    kicker: str,
+    index: int,
+    palette: Sequence[str] = (),
+) -> Image.Image:
+    """Compose the user's photograph into the same poster grammar as the made frames.
 
-    A scrim keeps the caption legible, but a bright frame needs more than a
-    subtitle: the artwork carries a small kicker (the concept) at the top of the
-    safe area and one tracked word (the treatment) in the mid-frame. The
-    narrative line is the caption layer's job, so nothing is said twice.
+    A photograph has no measured negative space, so type cannot simply be laid
+    on top of it: the lower band becomes a deep panel the way the designed
+    frames do it, which guarantees the caption layer always has a ground no
+    matter what the user uploaded. Above that, the picture is untouched except
+    for a kicker in the top safe area and the treatment set over its lower
+    third with a measured gradient.
     """
     width, height = frame.size
-    draw = ImageDraw.Draw(frame)
     margin = int(width * 0.085)
+    frame = frame.convert("RGB")
 
+    from PIL import ImageStat
+
+    roles = palette_roles(list(palette)) if palette else {"base": "#141416"}
+    deep = _mix(hex_to_rgb(roles["base"]), (0, 0, 0), 0.62)
+    accent = hex_to_rgb(roles.get("accent", "#FF6B3D"))
+
+    def luma_of(box) -> float:
+        return ImageStat.Stat(frame.crop(box).convert("L")).mean[0] / 255
+
+    # ── the deep panel: from a soft ramp at 50% to solid by 68%, held down
+    panel_top = int(height * 0.50)
+    panel_full = int(height * 0.68)
+    ramp = Image.new("RGBA", frame.size, (0, 0, 0, 0))
+    rd = ImageDraw.Draw(ramp)
+    span = max(1, panel_full - panel_top)
+    for py in range(panel_top, height):
+        t = min(1.0, (py - panel_top) / span)
+        alpha = int(255 * (t ** 1.45))
+        rd.line([(0, py), (width, py)], fill=(*deep, alpha))
+    frame = Image.alpha_composite(frame.convert("RGBA"), ramp).convert("RGB")
+    draw = ImageDraw.Draw(frame)
+
+    # a single hairline separates picture from panel, the way the posters do it
+    edge = panel_full - int(height * 0.012)
+    draw.line([(margin, edge), (width - margin, edge)], fill=_mix(deep, (255, 255, 255), 0.20),
+              width=max(1, int(width / 1100)))
+
+    # ── kicker: tracked caps with an accent mark, over the picture
     if kicker:
-        from PIL import ImageStat
+        probe = _ui_font(max(15, int(width * 0.0195)), 600)
+        ky = int(height * 0.075)
+        natural = sum(draw.textlength(c, font=probe) for c in kicker.upper())
+        tracking = max(1.0, min(width * 0.0052, (width - margin * 2 - natural) / max(1, len(kicker))))
+        ink = (16, 16, 18) if luma_of((margin, ky, margin + int(width * 0.20),
+                                       ky + int(probe.size * 1.1))) > 0.62 else (250, 248, 244)
+        square = max(3, int(width * 0.007))
+        baseline = ky + int(probe.size * 0.46)
+        draw.rectangle([margin, baseline, margin + square, baseline + square], fill=accent)
+        kx = margin + int(width * 0.026)
+        halo = (0, 0, 0, 100) if sum(ink) > 300 else (255, 255, 255, 100)
+        shade = Image.new("RGBA", frame.size, (0, 0, 0, 0))
+        _tracked_text(ImageDraw.Draw(shade), (kx + 1, ky + 1), kicker.upper(), probe,
+                      halo, tracking=tracking)
+        frame = Image.alpha_composite(frame.convert("RGBA"), shade).convert("RGB")
+        _tracked_text(ImageDraw.Draw(frame), (kx, ky), kicker.upper(), probe, ink, tracking=tracking)
 
-        probe = _font(max(14, int(width * 0.021)), bold=True)
-        available = width - margin * 2
-        natural = draw.textlength(kicker.upper(), font=probe)
-        tracking = max(1.0, min(width * 0.0030, (available - natural) / max(1, len(kicker))))
-        ky = int(height * 0.062)
-        band = frame.crop((margin, ky - 2, width - margin, ky + int(probe.size * 1.4)))
-        k_luma = ImageStat.Stat(band.convert("L")).mean[0] / 255
-        k_ink = (20, 20, 22) if k_luma > 0.6 else (255, 255, 255)
-        _tracked_text(draw, (margin, ky), kicker.upper(), probe, k_ink, tracking=tracking)
-
+    # ── the treatment, sitting just above the panel
     if name:
-        label = name.upper()
-        word_font = _font(max(26, int(width * 0.058)), bold=True)
-        natural = draw.textlength(label, font=word_font)
-        available = width - margin * 2
-        tracking = max(1.0, min(width * 0.012, (available - natural) / max(1, len(label))))
-        # the word sits low in the frame with the caption scrim beneath it,
-        # so the treatment reads as a title card rather than a stray label
-        y = int(height * (0.735 + (index % 2) * 0.028))
-
-        # measure the ground behind the word and pick ink that survives it,
-        # rather than assuming white type works on every photograph
-        word_h = int(word_font.size * 1.2)
-        region = frame.crop((margin, y - 4, width - margin, y + word_h))
-        # darken only the measured band, so light ink always has a ground
-        band = Image.new("RGBA", region.size, (0, 0, 0, 0))
-        from PIL import ImageDraw as _ID
-
-        _ID.Draw(band).rectangle([0, 0, region.size[0], region.size[1]], fill=(0, 0, 0, 0))
-        scrim = Image.new("RGBA", frame.size, (0, 0, 0, 0))
-        _ID.Draw(scrim).rectangle(
-            [0, y - int(height * 0.018), width, y + word_h + int(height * 0.012)],
-            fill=(0, 0, 0, 96),
-        )
-        frame = Image.alpha_composite(frame.convert("RGBA"), scrim).convert("RGB")
+        label = name.capitalize()
         draw = ImageDraw.Draw(frame)
-        region = frame.crop((margin, y - 4, width - margin, y + word_h))
-        from PIL import ImageStat
+        font, lines = _fit_with(draw, label, _display_font, int(width * 0.82), 2,
+                                int(width * 0.105), int(width * 0.055))
+        line_height = int(font.size * 1.06)
+        block_h = line_height * len(lines)
+        y = max(int(height * 0.30), panel_top - int(height * 0.055) - block_h)
+        # measure only where the glyphs actually land, not the whole frame width
+        widest = max(draw.textlength(line, font=font) for line in lines)
+        box = (margin, y, min(width - margin, margin + int(widest) + 8), y + block_h)
+        ground = luma_of(box)
+        if 0.30 <= ground <= 0.70:
+            # an ambiguous ground gets the same treatment a photo editor would
+            # use: a soft local gradient, so the word never fights the picture
+            soft = Image.new("RGBA", frame.size, (0, 0, 0, 0))
+            sdraw = ImageDraw.Draw(soft)
+            pad_x, pad_y = int(width * 0.05), int(height * 0.02)
+            top = y - pad_y
+            span_y = max(1, block_h + pad_y * 2)
+            for py in range(max(0, top), min(height, top + span_y)):
+                t = (py - top) / span_y
+                a = int(150 * (1 - abs(t * 2 - 1) ** 2))
+                sdraw.line([(max(0, margin - pad_x), py),
+                            (min(width, margin + int(widest) + pad_x), py)],
+                           fill=(*deep, a))
+            frame = Image.alpha_composite(frame.convert("RGBA"), soft).convert("RGB")
+            draw = ImageDraw.Draw(frame)
+            ground = luma_of(box)
 
-        luma = ImageStat.Stat(region.convert("L")).mean[0] / 255
-        ink = (18, 18, 20) if luma > 0.72 else (250, 250, 248)
-        shadow = (255, 255, 255) if luma > 0.72 else (0, 0, 0)
+        light_ground = ground > 0.55
+        ink = (18, 16, 16) if light_ground else (250, 248, 244)
+        shade_rgba = (255, 255, 255, 96) if light_ground else (0, 0, 0, 110)
 
-        x = margin
-        for char in label:
-            draw.text((x + 2, y + 2), char, font=word_font, fill=shadow)
-            draw.text((x, y), char, font=word_font, fill=ink)
-            x += draw.textlength(char, font=word_font) + tracking
-    return frame
+        shade = Image.new("RGBA", frame.size, (0, 0, 0, 0))
+        sd = ImageDraw.Draw(shade)
+        yy = y
+        for line in lines:
+            sd.text((margin + 2, yy + 3), line, font=font, fill=shade_rgba)
+            yy += line_height
+        frame = Image.alpha_composite(frame.convert("RGBA"), shade).convert("RGB")
+        draw = ImageDraw.Draw(frame)
+        rule_y = y - int(height * 0.024)
+        draw.rectangle([margin, rule_y, margin + int(width * 0.10),
+                        rule_y + max(3, int(height / 460))], fill=accent)
+        for line in lines:
+            draw.text((margin, y), line, font=font, fill=ink)
+            y += line_height
+
+    # ── footer: identical to the designed frames, so the set is coherent
+    foot = Image.new("RGBA", frame.size, (0, 0, 0, 0))
+    fd = ImageDraw.Draw(foot)
+    fy = int(height * 0.865)
+    foot_ink = _mix((250, 248, 244), deep, 0.18)
+    fd.line([(margin, fy), (width - margin, fy)], fill=(*foot_ink, 52), width=max(1, int(width / 1200)))
+    ff = _ui_font(max(12, int(width * 0.0145)), 500)
+    _tracked_text(fd, (margin, fy + int(height * 0.012)), "OPENMONTAGE STUDIO",
+                  ff, foot_ink, tracking=width * 0.0045)
+    right = "YOUR IMAGE"
+    rw = fd.textlength(right, font=ff) + len(right) * (width * 0.0045)
+    _tracked_text(fd, (width - margin - int(rw), fy + int(height * 0.012)), right,
+                  ff, foot_ink, tracking=width * 0.0045)
+    return Image.alpha_composite(frame.convert("RGBA"), foot).convert("RGB")
 
 
 def _mix(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
@@ -823,7 +889,7 @@ def photography_variants(
             frame = Image.blend(frame, tinted, 0.45)
         frame = _vignette(frame, 0.24)
         if narrate:
-            frame = _photo_type_block(frame, name, narrate, index)
+            frame = _photo_type_block(frame, name, narrate, index, palette)
         path = out_dir / f"look_{index + 1:02d}_{name}.jpg"
         frame.save(path, quality=94, subsampling=1)
         out.append(

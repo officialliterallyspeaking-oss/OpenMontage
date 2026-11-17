@@ -116,11 +116,30 @@ def write_script(
     }
 
 
+# ordinals take "the" ("the first thirty seconds"); bare numerals and
+# quantifiers already determine the phrase and take nothing
+ORDINALS = {
+    "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth",
+    "ninth", "tenth", "last", "next", "final", "only", "same",
+}
+QUANTIFIERS = {
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "hundred", "thousand", "million", "many", "most", "some", "few",
+    "several", "all", "both", "each", "every", "no", "half", "twice", "once",
+    "another", "other", "least", "more", "any",
+}
+
+
 def _with_article(phrase: str) -> str:
     if not phrase:
         return phrase
     words = phrase.split()
     if words[0].lower() in {"a", "an", "the", "my", "our", "your"}:
+        return phrase
+    # "a first thirty seconds" is not English
+    if words[0].lower() in ORDINALS:
+        return f"the {phrase}"
+    if words[0].isdigit() or words[0].lower() in QUANTIFIERS:
         return phrase
     article = "an" if words[0][:1].lower() in "aeiou" else "a"
     # only singular, countable-looking phrases take an article

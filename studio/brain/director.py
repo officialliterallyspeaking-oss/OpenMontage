@@ -51,7 +51,41 @@ def _read_sentences(text: str) -> list[str]:
 
 DETERMINERS = {"a", "an", "the", "this", "that", "these", "those", "my", "our", "your",
                "some", "any", "each", "every"}
-FILLERS = {"really", "very", "quite", "super", "kind", "of", "sort", "with", "for", "and", "to", "in", "on"}
+FILLERS = {"really", "very", "quite", "super", "kind", "of", "sort", "with", "for",
+           "and", "to", "in", "on", "about", "into", "over", "under", "from", "at",
+           "by", "as", "than", "after", "before", "during", "without", "between"}
+
+# A subject is a thing, not a clause. When no known noun matched we still have
+# to name what the piece is about, and cutting an arbitrary window out of the
+# sentence produces titles like "film decide everything" — English a person can
+# see is broken. The head noun phrase ends where the verb starts, so a small
+# verb list is enough to find that boundary without a parser.
+LEAD_INS = {"why", "how", "what", "that", "because", "if", "when", "this", "it"}
+
+VERBS = {
+    "is", "are", "was", "were", "be", "been", "being", "has", "have", "had",
+    "do", "does", "did", "will", "would", "can", "could", "should", "makes",
+    "make", "made", "decide", "decides", "decided", "beats", "beat", "helps",
+    "help", "keeps", "keep", "kept", "turns", "turn", "turned", "feels", "feel",
+    "looks", "look", "changes", "change", "changed", "works", "work", "worked",
+    "matters", "matter", "means", "mean", "needs", "need", "gives", "give",
+    "gets", "get", "goes", "go", "comes", "come", "takes", "take", "becomes",
+    "become", "stays", "stay", "wins", "win", "fails", "fail", "ruins", "ruin",
+    "saves", "save", "sells", "sell", "builds", "build", "creates", "create",
+    "shows", "show", "tells", "tell", "finds", "find", "loves", "love",
+    "hates", "hate", "wants", "want", "likes", "like", "quit", "quits", "stop",
+    "stops", "buy", "buys", "buying", "avoid", "avoids", "choose", "chooses",
+    "pick", "picks", "use", "uses", "try", "tries", "start", "starts", "begin",
+    "begins", "end", "ends", "finish", "finishes", "learn", "learns", "teach",
+    "teaches", "wear", "wears", "cook", "cooks", "run", "runs", "eat", "eats",
+    "sleep", "sleeps", "drink", "drinks", "read", "reads", "write", "writes",
+    "lose", "loses", "gain", "gains", "fix", "fixes", "break", "breaks",
+}
+
+# only useful words: when the head noun is a pronoun the real subject is
+# wherever the sentence puts it, which in English is usually at the end
+PRONOUNS = {"nobody", "everyone", "everybody", "someone", "somebody", "people",
+            "you", "they", "we", "i", "it", "anyone", "anybody", "most"}
 
 
 def _subject_of(text: str, niche: kb.Niche) -> tuple[str, bool]:
@@ -70,10 +104,33 @@ def _subject_of(text: str, niche: kb.Niche) -> tuple[str, bool]:
     # No known subject: take the last noun-ish phrase of the first clause, which
     # is where English puts the head noun ("... tailored wool coat").
     clause = re.split(r"[,.;]", _read_sentences(text)[0] if _read_sentences(text) else text)[0]
-    tokens = [t for t in re.findall(r"[a-zA-Z][a-zA-Z'\-]*", clause.lower())
-              if t not in DETERMINERS and t not in FILLERS]
-    if tokens:
-        return " ".join(tokens[-3:]), False
+    # Keep every word: a subject is a phrase a person would say, and dropping
+    # the small words out of the middle ("seconds film") breaks it. Function
+    # words are only trimmed from the ends, and only at the very end.
+    words = re.findall(r"[a-zA-Z][a-zA-Z'\-]*", clause.lower())
+    if words:
+        # an imperative starts with its verb, so the whole clause is the subject
+        if words[0] in VERBS:
+            head = words
+        else:
+            cut = next((i for i, w in enumerate(words) if w in VERBS), len(words))
+            head = words[:cut] or words
+        if len(head) == 1 and head[0] in PRONOUNS:
+            # the head noun is a pronoun, so the real subject sits elsewhere;
+            # in English it is usually the last concrete word of the sentence
+            tail = [w for w in words if w not in VERBS and w not in FILLERS
+                    and w not in DETERMINERS and w not in LEAD_INS
+                    and w not in PRONOUNS]
+            if tail:
+                head = tail[-2:]
+        if len(head) > 6:
+            head = head[-6:]
+        while head and head[0] in DETERMINERS | LEAD_INS | FILLERS:
+            head = head[1:]
+        while head and head[-1] in FILLERS | {"that", "which", "who", "when", "where"}:
+            head = head[:-1]
+        if head:
+            return " ".join(head), False
     return niche.subjects[0], False
 
 

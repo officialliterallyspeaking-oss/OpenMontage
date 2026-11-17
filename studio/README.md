@@ -52,6 +52,14 @@ tablist with arrow-key support and roving `tabindex`, `aria-current` on nav,
 `role="progressbar"` plus a polite live region for stage changes, focus-trapped
 theatre overlay that returns focus on close, and 44px targets on touch layouts.
 
+**The artwork.** Local frames are composed, not filled: five poster
+compositions (aperture, column, horizon, plates, field) built from solid
+palette masses with one light direction, set in the same Instrument Serif and
+Inter as the interface. `studio/assets/fonts/` holds TTF builds of those two
+families (produced from the woff2 the UI ships), used by both the frame
+renderer and the burned captions, so the video and the app around it are
+visibly one product.
+
 **Honesty as UI.** Provenance is a first-class visual: `From your image`,
 `Model generated`, or `Local preview · no model`, carried from the frame to the
 package to the quality report. The Quality tab states the search-volume and
@@ -218,8 +226,13 @@ Interactive docs at `/api/docs`.
 ## Tests
 
 ```bash
-python -m pytest tests/studio -v
+python -m pytest tests/studio -v          # backend + API contracts
+node tests/studio/ui_smoke.js             # 41 UI behaviours in jsdom
+node tests/studio/ui_a11y.js              # AA contrast + touch targets in Chromium
 ```
+
+The two browser harnesses need `jsdom` / `puppeteer-core` and a Chromium; set
+`CHROME_PATH` to reuse a local browser instead of downloading one.
 
 They run against the live app and the real registry — including a real MP4 render
 — and assert the documented degradation (placeholder art when no provider is

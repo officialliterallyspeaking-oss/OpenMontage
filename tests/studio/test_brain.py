@@ -69,6 +69,44 @@ def test_director_reads_niche_subject_and_duration() -> None:
     assert 7 <= intent["duration_seconds"] <= 60
 
 
+def test_subject_is_a_phrase_a_person_would_say() -> None:
+    """The subject is printed on the artwork, so it cannot be a torn-off clause.
+
+    A generic brief used to yield "film decide everything" — a verb phrase with
+    no head noun — which then appeared as the headline of the poster and the
+    first line of the caption.
+    """
+    cases = {
+        "why the first thirty seconds of a film decide everything": "first thirty seconds of a film",
+        "three quiet habits that make a small kitchen feel twice as large": "three quiet habits",
+        "stop buying cheap shoes": "stop buying cheap shoes",
+        "nobody tells you this about espresso": "espresso",
+    }
+    for brief, expected in cases.items():
+        subject, found = director._subject_of(brief, knowledge.GENERIC)
+        assert subject == expected, f"{brief!r} -> {subject!r}"
+        # never a verb in the middle of the phrase, which is what reads as broken
+        # (an imperative legitimately *starts* with one)
+        if brief.split()[0] not in director.VERBS:
+            assert not any(w in director.VERBS for w in subject.split()), subject
+
+
+def test_articles_read_as_english() -> None:
+    """The studio writes the on-screen lines, so its grammar has to hold.
+
+    "Here is why a first thirty seconds of a film works" is the kind of seam
+    that makes a generator feel like a template instead of a studio.
+    """
+    cases = {
+        "first thirty seconds of a film": "the first thirty seconds of a film",
+        "wool coat": "a wool coat",
+        "espresso": "an espresso",
+        "three quiet habits": "three quiet habits",
+    }
+    for phrase, expected in cases.items():
+        assert producer._with_article(phrase) == expected, phrase
+
+
 def test_director_states_assumptions_instead_of_pretending() -> None:
     intent = director.interpret({"text": "something about the sea"})
     assert intent["confidence"] < 0.75

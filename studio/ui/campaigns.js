@@ -145,6 +145,7 @@ function shortDetail(detail) {
   return file;
 }
 
+const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 const fmtSeconds = (value) => {
   const n = Number(value) || 0;
   if (n < 0.1) return "instant";
@@ -329,8 +330,7 @@ function castCard() {
           </span>
           <span class="go" aria-hidden="true">→</span>
         </a>` : html`
-        <div class="cs-cast-work">
-          <span class="ph"></span>
+        <div class="cs-cast-work is-empty">
           <span class="meta">
             <small>Nothing made yet</small>
             <strong>Your first campaign will appear here.</strong>
@@ -405,7 +405,7 @@ function renderCreate() {
             <div class="cs-dock-tools">
               <label class="cs-sr" for="platform">Platform</label>
               <select class="cs-select" id="platform">
-                <option value="">Platform: auto</option>
+                <option value="">Platform — auto</option>
                 <option value="tiktok">TikTok</option>
                 <option value="instagram">Instagram</option>
                 <option value="youtube">YouTube</option>
@@ -413,7 +413,7 @@ function renderCreate() {
               </select>
               <label class="cs-sr" for="length">Length</label>
               <select class="cs-select" id="length">
-                <option value="">Length: auto</option>
+                <option value="">Length — auto</option>
                 <option value="8">8 seconds</option>
                 <option value="12">12 seconds</option>
                 <option value="15">15 seconds</option>
@@ -422,7 +422,7 @@ function renderCreate() {
               </select>
               <label class="cs-sr" for="provider">Generator</label>
               <select class="cs-select" id="provider">
-                <option value="auto">Generator: auto</option>
+                <option value="auto">Generator — auto</option>
                 <option value="local">Local design</option>
               </select>
               <span class="cs-spacer"></span>
@@ -729,7 +729,7 @@ function renderProgress(project) {
           <div class="cs-feed-head"><span class="cs-feed-dot" aria-hidden="true"></span>Live activity</div>
           <ul>
             ${events.length
-              ? events.map((event) => html`
+              ? events.slice().reverse().map((event) => html`
                   <li>
                     <span class="sys cs-sys-${event.system}">${event.system}</span>
                     <span class="msg">${humanEvent(event)}</span>
@@ -900,7 +900,7 @@ function renderProject() {
           </div>
 
           <dl class="cs-facts">
-            ${fact("Made in", elapsedLabel(project))}
+            ${fact("Rendered in", elapsedLabel(project))}
             ${fact("Shots", `${frames.length}`)}
             ${fact("Format", render ? `${render.resolution} · ${render.aspect || "9:16"}` : "stills")}
             ${fact("Angle", selected?.name || "—")}
@@ -1338,7 +1338,7 @@ function qualityPanel(project) {
       ${section("Findings", html`
         <p>
           <span class="cs-pill ${review.status === "pass" ? "ok" : "warn"}">${review.status}</span>
-          <span class="cs-hint">${(findings?.findings || []).length} finding(s) · suggested:
+          <span class="cs-hint">${plural((findings?.findings || []).length, "finding")} · suggested:
             ${ACTIONS[review.recommended_action] || review.recommended_action}</span>
         </p>
         <div class="cs-findings">

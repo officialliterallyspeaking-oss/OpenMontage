@@ -676,7 +676,14 @@ a { color: inherit; }
 }
 @keyframes cs-blink { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
 
-.cs-feed ul { list-style: none; margin: 0; padding: 8px 0; overflow: auto; }
+.cs-feed ul {
+  list-style: none; margin: 0; padding: 8px 0; overflow: auto; min-height: 0;
+  /* newest is at the top; the fade says there is history below it */
+  mask-image: linear-gradient(180deg, #000 calc(100% - 34px), transparent);
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+.cs-feed ul::-webkit-scrollbar { width: 6px; }
+.cs-feed ul::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
 .cs-feed li {
   display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px;
   padding: 7px 16px; font-size: 12.5px; line-height: 1.5;
@@ -1317,9 +1324,19 @@ a { color: inherit; }
   .cs-dock-body, .cs-dock.has-image .cs-dock-body { grid-template-columns: 1fr; }
   .cs-drop { width: 100%; aspect-ratio: 16 / 9; min-height: 0; }
   .cs-dock.has-image .cs-drop { width: 100%; min-height: 150px; }
-  .cs-dock-tools { padding: 4px; }
-  .cs-dock-tools .cs-select { flex: 1; min-width: 0; }
-  .cs-dock .cs-primary { width: 100%; }
+  .cs-dock-tools { padding: 6px 4px 4px; gap: 6px; }
+  .cs-dock-tools .cs-select {
+    flex: 1 1 calc(50% - 6px); min-width: 0;
+    padding: 9px 24px 9px 10px; font-size: 12px;
+    background-position: right 8px center;
+  }
+  .cs-dock .cs-primary { width: 100%; margin-top: 2px; }
+  .cs-strip { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
+  .cs-strip a { aspect-ratio: 9 / 16; }
+  .cs-facts { grid-template-columns: 1fr 1fr; }
+  .cs-facts > div:nth-child(3) { grid-column: 1 / -1; }
+  .cs-dock textarea { font-size: 16px; min-height: 92px; padding: 14px 12px 8px; }
+  .cs-nav-btn { min-height: 36px; }
   .cs-verdict { grid-template-columns: 1fr; }
   .cs-ring { width: 74px; height: 74px; }
   .cs-ring .val { font-size: 24px; }
