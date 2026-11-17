@@ -397,6 +397,16 @@ def _composition_field(size, ink, accent, second, base, rng):
 COMPOSITIONS = (_composition_aperture, _composition_column,
                 _composition_horizon, _composition_plates, _composition_field)
 
+# The recipe catalogue names a composition by meaning ("aperture", "column"),
+# so the choice can be argued about in the plan instead of being an index.
+COMPOSITIONS_BY_NAME = {
+    "aperture": _composition_aperture,
+    "column": _composition_column,
+    "horizon": _composition_horizon,
+    "plates": _composition_plates,
+    "field": _composition_field,
+}
+
 def design_frame(
     out_path: str | Path,
     *,
@@ -410,6 +420,7 @@ def design_frame(
     style: str = "editorial",
     label: str = "",
     texture_source: str | Path | None = None,
+    composition: str | None = None,
 ) -> dict:
     """Compose one designed frame. Returns metadata about what was drawn."""
     out_path = Path(out_path)
@@ -473,8 +484,10 @@ def design_frame(
     # depth, a crisp middle plane that carries the geometry, and type on top.
     # The variant chooses the composition, so four shots read as four ideas
     # rather than four rearrangements of the same blob.
-    composition = COMPOSITIONS[variant % len(COMPOSITIONS)]
-    mid = composition(size, ink, accent, second, base, rng)
+    # A named composition comes from the shot recipe; without one, fall back to
+    # the variant so a caller that knows nothing about recipes still varies.
+    compose = COMPOSITIONS_BY_NAME.get(composition or "") or COMPOSITIONS[variant % len(COMPOSITIONS)]
+    mid = compose(size, ink, accent, second, base, rng)
 
     # a defocused echo behind the crisp plane gives depth without haze
     echo = mid.filter(ImageFilter.GaussianBlur(int(width * 0.018)))

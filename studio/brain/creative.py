@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from studio.brain import knowledge as kb
+from studio.brain import recipes as shot_recipes
 from studio.brain import localfx
 from studio.motion import ASPECTS
 
@@ -341,9 +342,20 @@ def plan_visuals(
         intent.get("aspect") or "16:9", (1920, 1080)
     )
 
+    # The craft layer: which device each beat is built with, and why. Chosen
+    # before the shot description so the description can follow the device
+    # rather than the other way round.
+    chosen = shot_recipes.select_recipes(
+        beats,
+        rhythm_seconds=float(concept.get("cut_rhythm_seconds") or 2.0),
+        has_image=bool(media and (media.get("path") or intent.get("has_image"))),
+        treatment=str(concept.get("treatment") or concept.get("name") or ""),
+    )
+
     shots = []
     for index, beat in enumerate(beats):
         visual = _shot_visual(index, len(beats), beat["beat"], intent, concept, niche)
+        recipe = chosen[index] if index < len(chosen) else None
         interior = f"{niche.lighting[index % len(niche.lighting)]}, {niche.visual_vocabulary[index % len(niche.visual_vocabulary)]}"
         shots.append(
             {
@@ -355,11 +367,25 @@ def plan_visuals(
                 "duration_seconds": round(beat["end_seconds"] - beat["start_seconds"], 2),
                 "description": visual["description"],
                 "framing": visual["framing"],
-                "movement": _motion_for(index, len(beats), concept, media),
+                # the recipe's move wins: it was chosen to serve this beat,
+                # where _motion_for only avoids repeating the previous one
+                "movement": (recipe or {}).get("movement") or _motion_for(index, len(beats), concept, media),
                 "lighting": interior,
                 "transition_in": "cut" if index == 0 else ("dissolve" if concept["cut_rhythm_seconds"] > 2.2 else "whip_cut"),
                 "text_overlay": visual["text_overlay"],
                 "palette_role": ["ground", "ink", "accent", "support"][index % 4],
+                "recipe": {
+                    "id": recipe["id"],
+                    "name": recipe["name"],
+                    "function": recipe["function"],
+                    "composition": recipe["composition"],
+                    "movement": recipe["movement"],
+                    "hold_seconds": recipe["hold_seconds"],
+                    "grammar": recipe["grammar"],
+                    "why": recipe["why"],
+                    "pitfall": recipe["pitfall"],
+                    "reason": recipe["reason"],
+                } if recipe else None,
             }
         )
 
@@ -373,6 +399,7 @@ def plan_visuals(
         "safe_insets": SAFE_INSETS,
         "shots": shots,
         "consistency": _consistency_plan(intent, concept, media, palette),
+        "craft": shot_recipes.summary(chosen),
         "source_notes": (media or {}).get("notes", []),
     }
 
@@ -702,6 +729,7 @@ def _local_frame(
         width=width,
         height=height,
         variant=index,
+        composition=(shot.get("recipe") or {}).get("composition"),
         style="editorial" if concept["cut_rhythm_seconds"] > 2.0 else "graphic",
         label="LOCAL PREVIEW · NO MODEL",
     )
